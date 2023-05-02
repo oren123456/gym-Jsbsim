@@ -113,7 +113,9 @@ class JSBSimEnv(gym.Env):
         self.simulation.set_property_value('propulsion/set-running', -1)
         self.simulation.set_property_value('ic/u-fps', 900.)
         self.simulation.set_property_value('ic/h-sl-ft', 5000)
-    
+
+
+
     def step(self, action):
         roll_cmd, pitch_cmd, yaw_cmd, throttle = action
 
@@ -126,8 +128,8 @@ class JSBSimEnv(gym.Env):
         # We take multiple steps of the simulation per step of the environment
         for _ in range(self.down_sample):
             # Freeze fuel consumption
-            self.simulation.set_property_value("propulsion/tank/contents-lbs", 1000)
-            self.simulation.set_property_value("propulsion/tank[1]/contents-lbs", 1000)
+            # self.simulation.set_property_value("propulsion/tank/contents-lbs", 1000)
+            # self.simulation.set_property_value("propulsion/tank[1]/contents-lbs", 1000)
 
             # Set gear up
             self.simulation.set_property_value("gear/gear-cmd-norm", 0.0)
@@ -150,22 +152,29 @@ class JSBSimEnv(gym.Env):
         if np.sqrt(np.sum((self.state[:2] - self.goal[:2])**2)) < self.dg and abs(self.state[2] - self.goal[2]) < self.dg:
             reward = 10
             done = True
-        
+
+        # reward += self.simulation.get_property_value("propulsion/tank/contents-lbs")/10000
+        # print(self.simulation.get_property_value("propulsion/tank/contents-lbs"))
+        # self.simulation.set_property_value("propulsion/tank[1]/contents-lbs")
+
         return np.hstack([self.state, self.goal]), reward, done, {}
-    
+
     def _get_state(self):
         # Gather all state properties from JSBSim
         for i, property in enumerate(STATE_FORMAT):
             self.state[i] = self.simulation.get_property_value(property)
-        
+
         # Rough conversion to meters. This should be fine near zero lat/long
         self.state[:2] *= RADIUS
-    
+
     def reset(self, seed=None):
         # Rerun initial conditions in JSBSim
         self.simulation.run_ic()
         self.simulation.set_property_value('propulsion/set-running', -1)
-        
+        # Set fuel consumption
+        self.simulation.set_property_value("propulsion/tank/contents-lbs", 1000)
+        self.simulation.set_property_value("propulsion/tank[1]/contents-lbs", 1000)
+
         # Generate a new goal
         rng = np.random.default_rng(seed)
         distance = rng.random() * 9000 + 1000
@@ -180,7 +189,7 @@ class JSBSimEnv(gym.Env):
         self._get_state()
 
         return np.hstack([self.state, self.goal])
-    
+
     def render(self, mode='human'):
         scale = 1e-3
 
@@ -200,11 +209,11 @@ class JSBSimEnv(gym.Env):
             self.viewer.objects.append(self.f16)
             self.viewer.objects.append(self.cylinder)
             self.viewer.objects.append(Grid(self.viewer.ctx, self.viewer.unlit, 21, 1.))
-        
+
         # Rough conversion from lat/long to meters
         x, y, z = self.state[:3] * scale
 
-        self.f16.transform.z = x 
+        self.f16.transform.z = x
         self.f16.transform.x = -y
         self.f16.transform.y = z
 
@@ -233,13 +242,13 @@ class JSBSimEnv(gym.Env):
         # print(self.f16.transform.position)
 
         # rot = Quaternion.from_euler(-self.state[10], -self.state[11], self.state[9], mode=1)
-        
+
 
         self.viewer.render()
 
         if mode == 'rgb_array':
             return self.viewer.get_frame()
-    
+
     def close(self):
         if self.viewer is not None:
             self.viewer.close()
@@ -248,14 +257,14 @@ class JSBSimEnv(gym.Env):
 class PositionReward(gym.Wrapper):
     """
     This wrapper adds an additional reward to the JSBSimEnv. The agent is 
-    rewarded based when movin closer to the goal and penalized when moving away.
+    rewarded based when moving closer to the goal and penalized when moving away.
     Staying at the same distance will result in no additional reward. The gain 
     may be set to weight the importance of this reward.
     """
     def __init__(self, env, gain):
         super().__init__(env)
         self.gain = gain
-    
+
     def step(self, action):
         obs, reward, done, info = super().step(action)
         displacement = obs[-3:] - obs[:3]
@@ -263,7 +272,7 @@ class PositionReward(gym.Wrapper):
         reward += self.gain * (self.last_distance - distance)
         self.last_distance = distance
         return obs, reward, done, info
-    
+
     def reset(self):
         obs = super().reset()
         displacement = obs[-3:] - obs[:3]

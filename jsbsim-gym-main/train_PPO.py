@@ -20,19 +20,19 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
     """
     Callback for saving a model (the check is done every ``check_freq`` steps)
     based on the training reward (in practice, we recommend using ``EvalCallback``).
-
     :param check_freq:
     :param log_dir: Path to the folder where the model will be saved.
       It must contains the file created by the ``Monitor`` wrapper.
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, check_freq: int, log_dir: str, verbose: int = 1):
+    def __init__(self, check_freq: int, log_dir: str, models_dir: str, verbose: int = 1):
         super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)
         self.check_freq = check_freq
         self.log_dir = log_dir
         self.save_path = os.path.join(log_dir, "best_model")
         self.best_mean_reward = -np.inf
+        self.models_dir = models_dir
 
     # def _init_callback(self) -> None:
     #     # Create folder if needed
@@ -59,7 +59,7 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
                     if self.verbose >= 1:
                         print(f"Saving new best model to {self.save_path}")
                     self.model.save(self.save_path)
-                    self.model.save(self.save_path + '../../../best_model')
+                    self.model.save(self.models_dir)
 
         return True
 
@@ -89,8 +89,8 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
 # print("Observation Space:", env.observation_space.shape)
 # print("Observation Sample:", env.observation_space.sample())
 
-models_dir = f"models/PPO-{int(time.time())}"
-log_dir = f"logs/PPO-{int(time.time())}"
+models_dir = f"models/best_PPO_model"
+log_dir = f"logs/{int(time.time())}-PPO"
 os.makedirs(log_dir, exist_ok=True)
 
 env = gym.make("JSBSim-v0")
@@ -98,19 +98,24 @@ env = Monitor(env, log_dir)
 
 # log_path = path.join(path.abspath(path.dirname(__file__)), 'logs')
 
-
 # try:
 # model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto',
 #             learning_rate=linear_schedule(0.001), )
 # model = SAC('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, gradient_steps=-1,
 #             device='auto')
-model = PPO.load("logs/best_model", env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
-                 gradient_steps=-1, device='auto')
-callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir)
+if os.path.exists(models_dir + ".zip"):
+    print("Continuing work on " + models_dir)
+    model = PPO.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
+                     gradient_steps=-1, device='auto')
+else:
+    print("Creating a new model")
+    model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto', )
+
+callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir)
 
 # model.learn(10000)
 
-TIMESTPES = 1000000
+TIMESTPES = 3000000
 # for i in range(1,100):
 #     model.learn(total_timesteps=TIMESTPES,reset_num_timesteps=False, tb_log_name=f"SAC-{int(time.time())}")
 model.learn(total_timesteps=int(TIMESTPES), callback=callback)

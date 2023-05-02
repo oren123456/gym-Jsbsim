@@ -1,6 +1,13 @@
 Tensorboard:
+C:\GitHub\gym-Jsbsim\jsbsim-gym-main\venv\Scripts\tensorboard --logdir C:\\GitHub\\gym-Jsbsim\\jsbsim-gym-main\\logs
 
-C:\GitHub\gym-Jsbsim\jsbsim-gym-main\venv\Scripts>tensorboard --logdir C:\\GitHub\\gym-Jsbsim\\jsbsim-gym-main\\logs
-TensorFlow installation not found - running with reduced feature set.
-Serving TensorBoard on localhost; to expose to the network, use a proxy or pass --bind_all
-TensorBoard 2.12.2 at http://localhost:6006/ (Press CTRL+C to quit)
+Reward:
+Touch point
+Touch ground
+Get fast
+Save on fuel
+Get closer
+Small turns
+Fly straight 
+
+

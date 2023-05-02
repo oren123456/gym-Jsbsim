@@ -13,7 +13,10 @@ policy_kwargs = dict(
 env = gym.make("JSBSim-v0", )
 # env = TimeLimit(env, max_episode_steps=10000)
 
-model = PPO.load("logs/PPO-1682942259/best_model.zip", env)
+models_dir = f"models/best_PPO_model"
+# models_dir = f"models/best_SAC_model"
+model = PPO.load(models_dir, env)
+
 
 mp4_writer = iio.get_writer("video.mp4", format="ffmpeg", fps=30)
 gif_writer = iio.get_writer("video.gif", format="gif", fps=5)
