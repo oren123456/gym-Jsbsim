@@ -107,6 +107,8 @@ class JSBSimEnv(gym.Env):
         self.goal = np.zeros(3)
         self.dg = 100
         self.viewer = None
+        #
+        # self.simulation.print_simulation_configuration()
 
     def _set_initial_conditions(self):
         # Set engines running, forward velocity, and altitude

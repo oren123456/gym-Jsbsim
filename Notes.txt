@@ -1,7 +1,7 @@
 Tensorboard:
 C:\GitHub\gym-Jsbsim\jsbsim-gym-main\venv\Scripts\tensorboard --logdir C:\\GitHub\\gym-Jsbsim\\jsbsim-gym-main\\logs
 
-Reward:
+REWARDS:
 Touch point
 Touch ground
 Get fast
@@ -9,5 +9,8 @@ Save on fuel
 Get closer
 Small turns
 Fly straight 
+
+DOCS:
+https://jsbsim-team.github.io/jsbsim-reference-manual/
 
 
