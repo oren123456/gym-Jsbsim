@@ -10,6 +10,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 import numpy as np
 from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_results
 from stable_baselines3.common.monitor import Monitor
+import torch
 
 policy_kwargs = dict(
     features_extractor_class=JSBSimFeatureExtractor
@@ -96,30 +97,26 @@ os.makedirs(log_dir, exist_ok=True)
 
 env = gym.make("JSBSim-v0")
 env = Monitor(env, log_dir)
-env.reset()
-
-
-
 
 # log_path = path.join(path.abspath(path.dirname(__file__)), 'logs')
 
 if os.path.exists(models_dir + ".zip"):
     print("Continuing work on " + models_dir)
     model = PPO.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
-                     gradient_steps=-1, device='auto', learning_rate=linear_schedule(0.001))
+                     gradient_steps=-1, device='cpu', learning_rate=linear_schedule(0.001))
 else:
     print("Creating a new model")
     model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto',
                 learning_rate=linear_schedule(0.001))
 
 callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir)
+# print("Used Device: ", get_device_str())
+print("Used Device: ", model.device)
 
-TIMESTPES = 3000
-
-
-
-for i in range(1, 100):
-    model.learn(total_timesteps=int(TIMESTPES), callback=callback)
+TIMESTPES = 3000000
+# for i in range(1, 2):
+env.reset()
+model.learn(total_timesteps=int(TIMESTPES), callback=callback)
 
 env.close()
 # Usefull
