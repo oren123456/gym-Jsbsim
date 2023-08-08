@@ -90,7 +90,7 @@ class JSBSimEnv(gym.Env):
         super().__init__()
 
         # Set observation and action space format
-        self.observation_space = gym.spaces.Box(STATE_LOW, STATE_HIGH, (15,))
+        self.observation_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (15,))
         self.action_space = gym.spaces.Box(np.array([-1,-1,-1,0]), 1, (4,))
 
         # Initialize JSBSim

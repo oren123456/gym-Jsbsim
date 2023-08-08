@@ -13,8 +13,8 @@ policy_kwargs = dict(
 env = gym.make("JSBSim-v0", )
 # env = TimeLimit(env, max_episode_steps=10000)
 
-# RL_algo = "PPO"
-RL_algo= "SAC"
+RL_algo = "PPO"
+# RL_algo= "SAC"
 
 models_dir = f"models/best_" + RL_algo + "_model"
 # models_dir = f"models/best_SAC_model"

@@ -93,33 +93,42 @@ models_dir = f"models/best_PPO_model"
 log_dir = f"logs/{int(time.time())}-PPO"
 os.makedirs(log_dir, exist_ok=True)
 
+
 env = gym.make("JSBSim-v0")
 env = Monitor(env, log_dir)
+env.reset()
+
+
+
 
 # log_path = path.join(path.abspath(path.dirname(__file__)), 'logs')
 
-# try:
-# model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto',
-#             learning_rate=linear_schedule(0.001), )
-# model = SAC('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, gradient_steps=-1,
-#             device='auto')
 if os.path.exists(models_dir + ".zip"):
     print("Continuing work on " + models_dir)
     model = PPO.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
-                     gradient_steps=-1, device='auto')
+                     gradient_steps=-1, device='auto', learning_rate=linear_schedule(0.001))
 else:
     print("Creating a new model")
-    model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto', )
+    model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto',
+                learning_rate=linear_schedule(0.001))
 
 callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir)
 
-# model.learn(10000)
+TIMESTPES = 3000
 
-TIMESTPES = 3000000
+
+
+for i in range(1, 100):
+    model.learn(total_timesteps=int(TIMESTPES), callback=callback)
+
+env.close()
+# Usefull
 # for i in range(1,100):
 #     model.learn(total_timesteps=TIMESTPES,reset_num_timesteps=False, tb_log_name=f"SAC-{int(time.time())}")
-model.learn(total_timesteps=int(TIMESTPES), callback=callback)
-#     model.save(f"{models_dir}/{TIMESTPES*i}")
-# finally:
+# mean_params = model.get_parameters()
+# print("Sample Observation: ", env.observation_space.sample())
+# print("Sample Action: ", env.action_space.sample())
+# model.save(f"{models_dir}/{TIMESTPES*i}")
 # model.save("models/jsbsim_sac")
 # model.save_replay_buffer("models/jsbsim_sac_buffer")
+# print("Observation Space: ", env.observation_space.shape)
