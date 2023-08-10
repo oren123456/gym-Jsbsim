@@ -4,3 +4,5 @@ jsbsim-gym-main/video.gif
 jsbsim-gym-main/models/jsbsim_sac_buffer.pkl
 jsbsim-gym-main/logs
 sbsim-gym-main/venv/Lib/site-packages
+*.mp4
+jsbsim-gym-main/models/best_PPO_model.zip.bu

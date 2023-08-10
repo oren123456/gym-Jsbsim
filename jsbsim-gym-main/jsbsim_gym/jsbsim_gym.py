@@ -105,7 +105,7 @@ class JSBSimEnv(gym.Env):
         self.down_sample = 4
         self.state = np.zeros(12)
         self.goal = np.zeros(3)
-        self.dg = 100
+        self.dg = 400
         self.viewer = None
         #
         # self.simulation.print_simulation_configuration()
@@ -145,21 +145,25 @@ class JSBSimEnv(gym.Env):
         reward = 0
         done = False
 
+        ep_info = {}
+        ep_info["goal"] = 0
         # Check for collision with ground
         if self.state[2] < 10:
-            reward = -10
+            ep_info["goal"] = -1
+            reward = -100
             done = True
 
         # Check if reached goal
         if np.sqrt(np.sum((self.state[:2] - self.goal[:2])**2)) < self.dg and abs(self.state[2] - self.goal[2]) < self.dg:
-            reward = 10
+            ep_info["goal"] = 1
+            reward = 100
             done = True
 
         # reward += self.simulation.get_property_value("propulsion/tank/contents-lbs")/10000
         # print(self.simulation.get_property_value("propulsion/tank/contents-lbs"))
         # self.simulation.set_property_value("propulsion/tank[1]/contents-lbs")
 
-        return np.hstack([self.state, self.goal]), reward, done, {}
+        return np.hstack([self.state, self.goal]), reward, done, ep_info
 
     def _get_state(self):
         # Gather all state properties from JSBSim
@@ -179,7 +183,8 @@ class JSBSimEnv(gym.Env):
 
         # Generate a new goal
         rng = np.random.default_rng(seed)
-        distance = rng.random() * 9000 + 1000
+        # distance = rng.random() * 9000 + 1000
+        distance = 9000
         bearing = rng.random() * 2 * np.pi
         altitude = rng.random() * 3000
 
@@ -272,7 +277,8 @@ class PositionReward(gym.Wrapper):
         displacement = obs[-3:] - obs[:3]
         distance = np.linalg.norm(displacement)
         reward += self.gain * (self.last_distance - distance)
-        self.last_distance = distance
+        self.last_distance= distance
+        info['distance'] = distance
         return obs, reward, done, info
 
     def reset(self):

@@ -10,6 +10,8 @@ from stable_baselines3.common.callbacks import BaseCallback
 import numpy as np
 from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_results
 from stable_baselines3.common.monitor import Monitor
+from collections import deque
+from stable_baselines3.common.utils import safe_mean
 import torch
 
 policy_kwargs = dict(
@@ -27,13 +29,21 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, check_freq: int, log_dir: str, models_dir: str, verbose: int = 1):
+    def __init__(self, check_freq: int, log_dir: str, models_dir: str, stats_window_size: int , verbose: int = 1):
         super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)
         self.check_freq = check_freq
         self.log_dir = log_dir
         self.save_path = os.path.join(log_dir, "best_model")
         self.best_mean_reward = -np.inf
         self.models_dir = models_dir
+        self.my_info_buffer = None  # type: Optional[deque]
+        self._stats_window_size = stats_window_size
+
+        if self.my_info_buffer is None :
+            self.my_info_buffer = deque(maxlen=self._stats_window_size)
+
+
+
 
     # def _init_callback(self) -> None:
     #     # Create folder if needed
@@ -41,9 +51,16 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
     #         os.makedirs(self.save_path, exist_ok=True)
 
     def _on_step(self) -> bool:
-        if self.n_calls % self.check_freq == 0:
+        # Add debug info for TensorBoard
+        if "episode" in self.locals['env'].buf_infos[0]:
+            info = self.locals['env'].buf_infos[0]
+            self.my_info_buffer.extend([{"distance":info['distance'], "goal": info['goal']}])
+            self.logger.record("oren/distance", safe_mean([ep_info["distance"] for ep_info in self.my_info_buffer]))
+            self.logger.record("oren/goal", safe_mean([ep_info["goal"] for ep_info in self.my_info_buffer]))
 
+        if self.n_calls % self.check_freq == 0:
             # Retrieve training reward
+            # x is time array & y is reward array
             x, y = ts2xy(load_results(self.log_dir), "timesteps")
             if len(x) > 0:
                 # Mean training reward over the last 100 episodes
@@ -103,19 +120,19 @@ env = Monitor(env, log_dir)
 if os.path.exists(models_dir + ".zip"):
     print("Continuing work on " + models_dir)
     model = PPO.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
-                     gradient_steps=-1, device='cpu', learning_rate=linear_schedule(0.001))
+                     gradient_steps=-1, device='cpu', )
+    # model.stats_window_size=10
 else:
     print("Creating a new model")
-    model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto',
-                learning_rate=linear_schedule(0.001))
+    model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='cpu' )
 
-callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir)
+ # learning_rate=linear_schedule(0.001)
+callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir, stats_window_size=model._stats_window_size)
 # print("Used Device: ", get_device_str())
 print("Used Device: ", model.device)
 
 TIMESTPES = 3000000
 # for i in range(1, 2):
-env.reset()
 model.learn(total_timesteps=int(TIMESTPES), callback=callback)
 
 env.close()

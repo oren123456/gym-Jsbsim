@@ -10,7 +10,7 @@ policy_kwargs = dict(
     features_extractor_class=JSBSimFeatureExtractor
 )
 
-env = gym.make("JSBSim-v0", )
+env = gym.make("JSBSim-v0")
 # env = TimeLimit(env, max_episode_steps=10000)
 
 RL_algo = "PPO"
