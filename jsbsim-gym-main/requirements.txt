@@ -1,7 +1,6 @@
-gym~=0.21.0
-imageio~=2.28.0
-torch~=2.0.1
+torch~=2.0.1+cu117
 JSBSim~=1.1.13
-numpy~=1.23.5
+gymnasium~=0.28.1
+numpy~=1.25.2
 pygame~=2.3.0
 moderngl~=5.8.2

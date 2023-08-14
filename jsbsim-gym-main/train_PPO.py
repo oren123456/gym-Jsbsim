@@ -1,6 +1,5 @@
-import gym
+import gymnasium as gym
 import jsbsim_gym.jsbsim_gym  # This line makes sure the environment is registered
-from os import path
 from jsbsim_gym.features import JSBSimFeatureExtractor
 from stable_baselines3 import SAC, PPO
 import time
@@ -12,11 +11,20 @@ from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_r
 from stable_baselines3.common.monitor import Monitor
 from collections import deque
 from stable_baselines3.common.utils import safe_mean
-import torch
 
-policy_kwargs = dict(
-    features_extractor_class=JSBSimFeatureExtractor
-)
+# algo = "SAC"
+algo = "PPO"
+stats_window_size = 100
+
+if algo == "PPO":
+    policy_kwargs = dict(
+        features_extractor_class=JSBSimFeatureExtractor,
+    )
+elif algo == "SAC":
+    policy_kwargs = dict(
+        features_extractor_class=JSBSimFeatureExtractor,
+        use_sde=False
+    )
 
 
 class SaveOnBestTrainingRewardCallback(BaseCallback):
@@ -29,7 +37,7 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, check_freq: int, log_dir: str, models_dir: str, stats_window_size: int , verbose: int = 1):
+    def __init__(self, check_freq: int, log_dir: str, models_dir: str, stats_window_size: int, verbose: int = 1):
         super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)
         self.check_freq = check_freq
         self.log_dir = log_dir
@@ -38,12 +46,10 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         self.models_dir = models_dir
         self.my_info_buffer = None  # type: Optional[deque]
         self._stats_window_size = stats_window_size
+        # self.local_time = time.time()
 
-        if self.my_info_buffer is None :
+        if self.my_info_buffer is None:
             self.my_info_buffer = deque(maxlen=self._stats_window_size)
-
-
-
 
     # def _init_callback(self) -> None:
     #     # Create folder if needed
@@ -54,9 +60,11 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         # Add debug info for TensorBoard
         if "episode" in self.locals['env'].buf_infos[0]:
             info = self.locals['env'].buf_infos[0]
-            self.my_info_buffer.extend([{"distance":info['distance'], "goal": info['goal']}])
+            self.my_info_buffer.extend([{"distance": info['distance'], "goal": info['goal']}])
             self.logger.record("oren/distance", safe_mean([ep_info["distance"] for ep_info in self.my_info_buffer]))
             self.logger.record("oren/goal", safe_mean([ep_info["goal"] for ep_info in self.my_info_buffer]))
+            # print("finished: " + str(time.time()-self.local_time))
+            # self.local_time = time.time()
 
         if self.n_calls % self.check_freq == 0:
             # Retrieve training reward
@@ -107,35 +115,46 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
 # print("Observation Space:", env.observation_space.shape)
 # print("Observation Sample:", env.observation_space.sample())
 
-models_dir = f"models/best_PPO_model"
-log_dir = f"logs/{int(time.time())}-PPO"
+local_time = time.localtime(time.time())
+log_dir = f"logs/" + str(local_time.tm_mon) + "_" + str(local_time.tm_mday) + "_" + str(local_time.tm_year) + "-" + \
+     str(local_time.tm_hour) + "_" + str(local_time.tm_min) + "_" + str(local_time.tm_sec) + "-" + algo
 os.makedirs(log_dir, exist_ok=True)
-
 
 env = gym.make("JSBSim-v0")
 env = Monitor(env, log_dir)
 
 # log_path = path.join(path.abspath(path.dirname(__file__)), 'logs')
-
+models_dir = f"models/best_" + algo + "_model"
 if os.path.exists(models_dir + ".zip"):
     print("Continuing work on " + models_dir)
-    model = PPO.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
-                     gradient_steps=-1, device='cpu', )
-    # model.stats_window_size=10
+    if algo == "SAC":
+        model = SAC.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
+                         gradient_steps=-1, device='auto', )
+    if algo == "PPO":
+        model = PPO.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
+                         gradient_steps=-1, device='cpu', )
+    model._stats_window_size = stats_window_size
 else:
     print("Creating a new model")
-    model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='cpu' )
+    if algo == "SAC":
+        model = SAC('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto')
+    if algo == "PPO":
+        model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto')
+    model._stats_window_size = 1
+# learning_rate=linear_schedule(0.001)
 
- # learning_rate=linear_schedule(0.001)
-callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir, stats_window_size=model._stats_window_size)
-# print("Used Device: ", get_device_str())
+callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir,
+                                            stats_window_size=model.stats_window_size)
 print("Used Device: ", model.device)
+print("Used Algorithm: ", algo)
 
 TIMESTPES = 3000000
 # for i in range(1, 2):
+
 model.learn(total_timesteps=int(TIMESTPES), callback=callback)
 
 env.close()
+
 # Usefull
 # for i in range(1,100):
 #     model.learn(total_timesteps=TIMESTPES,reset_num_timesteps=False, tb_log_name=f"SAC-{int(time.time())}")

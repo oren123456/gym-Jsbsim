@@ -1,8 +1,6 @@
-jsbsim-gym-main/video.mp4
-jsbsim-gym-main/video.gif
 *.gif
-jsbsim-gym-main/models/jsbsim_sac_buffer.pkl
 jsbsim-gym-main/logs
 sbsim-gym-main/venv/Lib/site-packages
-*.mp4
-jsbsim-gym-main/models/best_PPO_model.zip.bu
+jsbsim-gym-main/jsbsim_gym/__pycache__
+jsbsim-gym-main/jsbsim_gym/visualization/__pycache__
+*.pyc
