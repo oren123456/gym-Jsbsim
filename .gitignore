@@ -3,4 +3,10 @@ jsbsim-gym-main/logs
 sbsim-gym-main/venv/Lib/site-packages
 jsbsim-gym-main/jsbsim_gym/__pycache__
 jsbsim-gym-main/jsbsim_gym/visualization/__pycache__
+jsbsim/
+jsbsim-gym-main - Copy/
+jsbsim-gym-main/wandb
+CloseAirCombat-master/tests/wandb
+CloseAirCombat-master/tests/models
+CloseAirCombat-master/scripts/train/wandb
 *.pyc

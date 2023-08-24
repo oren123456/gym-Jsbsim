@@ -1,3 +1,5 @@
+import math
+
 import jsbsim
 import gymnasium as gym
 import numpy as np
@@ -8,19 +10,22 @@ from .visualization.quaternion import Quaternion
 
 # Initialize format for the environment state vector
 STATE_FORMAT = [
-    "position/lat-gc-rad",
-    "position/long-gc-rad",
-    "position/h-sl-meters",
-    "velocities/mach",
-    "aero/alpha-rad",
-    "aero/beta-rad",
-    "velocities/p-rad_sec",
-    "velocities/q-rad_sec",
-    "velocities/r-rad_sec",
-    "attitude/phi-rad",
-    "attitude/theta-rad",
-    "attitude/psi-rad",
+    "position/lat-gc-rad",  # GetLatitude
+    "position/long-gc-rad",  # GetLongitude
+    "position/h-sl-meters",  # Returns the current altitude above sea level
+    "velocities/mach",  # Gets the Mach number
+    "aero/alpha-rad",  # angle of attack in radians
+    "aero/beta-rad",  # Yaw Damper Beta
+    "velocities/p-rad_sec",  # body frame angular velocity component.
+    "velocities/q-rad_sec",  # body frame angular velocity component.
+    "velocities/r-rad_sec",  # body frame angular velocity component.
+    "attitude/phi-rad",  # Retrieves a vehicle Euler angle component
+    "attitude/theta-rad",  # Retrieves a vehicle Euler angle component
+    "attitude/psi-rad",  # Retrieves a vehicle Euler angle component
 ]
+
+# PropertyManager->Tie("attitude/pitch-rad", this, (int)eTht, (PMF) & FGPropagate::GetEuler);
+# PropertyManager->Tie("attitude/heading-true-rad", this, (int)ePsi, (PMF) & FGPropagate::GetEuler);
 
 STATE_LOW = np.array([
     -np.inf,
@@ -111,25 +116,29 @@ class JSBSimEnv(gym.Env):
         self.down_sample = 1
         self.state = np.zeros(12)
         self.goal = np.zeros(3)
-        self.dg = 400
+        self.dg = 400  # passing distance to goal - delta achieved goal
         self.viewer = None
         #
         # self.simulation.print_simulation_configuration()
 
+        # TacView
+        self._create_records = False
+
     def _set_initial_conditions(self):
         # Set engines running, forward velocity, and altitude
-        self.simulation.set_property_value('propulsion/set-running', -1)
-        self.simulation.set_property_value('ic/u-fps', 900.)
-        self.simulation.set_property_value('ic/h-sl-ft', 5000)
+        self.simulation.set_property_value('propulsion/set-running', -1)  # -1 refers to "All Engines"
+        self.simulation.set_property_value('ic/u-fps', 900.)  # Sets the initial body axis X velocity
+        self.simulation.set_property_value('ic/h-sl-ft', 5000)  # Set the altitude SL ( sea level )
 
     def step(self, action):
+        timestamp = self.simulation.get_sim_time()
         roll_cmd, pitch_cmd, yaw_cmd, throttle = action
 
         # Pass control inputs to JSBSim
-        self.simulation.set_property_value("fcs/aileron-cmd-norm", roll_cmd)
-        self.simulation.set_property_value("fcs/elevator-cmd-norm", pitch_cmd)
-        self.simulation.set_property_value("fcs/rudder-cmd-norm", yaw_cmd)
-        self.simulation.set_property_value("fcs/throttle-cmd-norm", throttle)
+        self.simulation.set_property_value("fcs/aileron-cmd-norm", roll_cmd)  # Sets the aileron command
+        self.simulation.set_property_value("fcs/elevator-cmd-norm", pitch_cmd)  # Sets the elevator command
+        self.simulation.set_property_value("fcs/rudder-cmd-norm", yaw_cmd)  # Sets the rudder command
+        self.simulation.set_property_value("fcs/throttle-cmd-norm", throttle)  # Sets the throttle command
 
         # We take multiple steps of the simulation per step of the environment
         for _ in range(self.down_sample):
@@ -138,8 +147,8 @@ class JSBSimEnv(gym.Env):
             # self.simulation.set_property_value("propulsion/tank[1]/contents-lbs", 1000)
 
             # Set gear up
-            self.simulation.set_property_value("gear/gear-cmd-norm", 0.0)
-            self.simulation.set_property_value("gear/gear-pos-norm", 0.0)
+            self.simulation.set_property_value("gear/gear-cmd-norm", 0.0)  # gear command 0 for up
+            self.simulation.set_property_value("gear/gear-pos-norm", 0.0)  # gear command 0 for up
 
             self.simulation.run()
 
@@ -179,11 +188,13 @@ class JSBSimEnv(gym.Env):
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
-        self.simulation.run_ic()
-        self.simulation.set_property_value('propulsion/set-running', -1)
+        self.simulation.run_ic()  # Initializes the sim from the initial condition object
+        self.simulation.set_property_value('propulsion/set-running', -1)  # -1 refers to "All Engines"
         # Set fuel consumption
-        self.simulation.set_property_value("propulsion/tank/contents-lbs", 1000)
-        self.simulation.set_property_value("propulsion/tank[1]/contents-lbs", 1000)
+        self.simulation.set_property_value("propulsion/tank/contents-lbs",
+                                           1000)  # Fuel transfer first tank defined in f16.xml
+        self.simulation.set_property_value("propulsion/tank[1]/contents-lbs",
+                                           1000)  # Fuel transfer second tank defined in f16.xml
 
         # Generate a new goal
         rng = np.random.default_rng(seed)
@@ -259,10 +270,62 @@ class JSBSimEnv(gym.Env):
             if 'rgb_array' in render_modes:
                 return self.viewer.get_frame()
 
+    # def tacview_log(self,  filepath='./JSBSimRecording.txt.acmi'):
+    #     """Renders the environment.
+    #     Note:
+    #         Make sure that your class's metadata 'render.modes' key includes
+    #           the list of supported modes. It's recommended to call super()
+    #           in implementations to use the functionality of this method.
+    #     :param mode: str, the mode to render with
+    #     """
+    #     if not self._create_records:
+    #         with open(filepath, mode='w', encoding='utf-8-sig') as f:
+    #             f.write("FileType=text/acmi/tacview\n")
+    #             f.write("FileVersion=2.1\n")
+    #             f.write("0,ReferenceTime=2020-04-01T00:00:00Z\n")
+    #         self._create_records = True
+    #     with open(filepath, mode='a', encoding='utf-8-sig') as f:
+    #         #timestamp = self.current_step * self.time_interval
+    #         timestamp = self.simulation.get_sim_time()
+    #         f.write(f"#{timestamp:.2f}\n")
+    #         log_msg = sim.log()
+    #             if log_msg is not None:
+    #                 f.write(log_msg + "\n")
+    #         for sim in self._tempsims.values():
+    #             log_msg = sim.log()
+    #             if log_msg is not None:
+    #                 f.write(log_msg + "\n")
+        # TODO: real time rendering [Use FlightGear, etc.]
+
     def close(self):
         if self.viewer is not None:
             self.viewer.close()
             self.viewer = None
+
+
+def calculate_hpr_difference(obs):
+    # Calculate the differences in latitude, longitude, and altitude
+    delta_latitude = math.radians(obs[-3] - obs[0])
+    delta_longitude = math.radians(obs[-2] - obs[1])
+    delta_altitude = obs[-1] - obs[2]
+
+    # Calculate the direction angle to the goal
+    goal_heading = math.atan2(delta_longitude, delta_latitude)
+
+    # Calculate the difference in heading
+    heading_difference_degrees = math.degrees(goal_heading - obs[9])
+
+    # Normalize the heading difference to be between -180 and 180 degrees
+    while heading_difference_degrees > 180:
+        heading_difference_degrees -= 360
+    while heading_difference_degrees < -180:
+        heading_difference_degrees += 360
+
+    # Calculate the difference in pitch (using altitude difference)
+    pitch_difference_degrees = math.degrees(
+        math.atan2(delta_altitude, math.sqrt(delta_latitude ** 2 + delta_longitude ** 2)))
+
+    return heading_difference_degrees, pitch_difference_degrees
 
 
 class PositionReward(gym.Wrapper):
@@ -283,6 +346,9 @@ class PositionReward(gym.Wrapper):
         displacement = obs[-3:] - obs[:3]
         distance = np.linalg.norm(displacement)
         reward += self.gain * (self.last_distance - distance)
+        #print(obs)
+       # h, p = calculate_hpr_difference(obs)
+        #print(h)
         self.last_distance = distance
         info['distance'] = distance
         return obs, reward, done, False, info
@@ -304,12 +370,6 @@ def wrap_jsbsim(**kwargs):
 gym.register(
     id="JSBSim-v0",
     entry_point=wrap_jsbsim,
-    max_episode_steps=1200
-)
-
-gym.register(
-    id="JSBSim-Test",
-    entry_point=JSBSimEnv,
     max_episode_steps=1200
 )
 
