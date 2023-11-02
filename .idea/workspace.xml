@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a9350ae9-3666-4172-b0ed-271840fdaf38" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/CloseAirCombat-master/envs/env_wrappers.py" beforeDir="false" afterPath="$PROJECT_DIR$/CloseAirCombat-master/envs/env_wrappers.py" afterDir="false" />
-    </list>
+    <list default="true" id="a9350ae9-3666-4172-b0ed-271840fdaf38" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -24,7 +22,7 @@
   "keyToString": {
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "last_opened_file_path": "C:/GitHub/gym-Jsbsim/CloseAirCombat-master",
+    "last_opened_file_path": "C:/GitHub/gym-Jsbsim/jsbsim-gym-main/train_PPO.py",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }
 }]]></component>
