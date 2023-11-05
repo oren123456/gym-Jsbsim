@@ -21,6 +21,7 @@ from config import get_config
 from envs.JSBSim.envs import SingleCombatEnv, SingleControlEnv, MultipleCombatEnv
 from envs.env_wrappers import DummyVecEnv, ShareDummyVecEnv
 import logging
+from stable_baselines3.common.env_util import make_vec_env
 
 from jsbsim_gym.jsbsim_gym import JSBSimEnv,PositionReward
 
@@ -91,26 +92,26 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
             self.logger.record("oren/distance", safe_mean([ep_info["distance"] for ep_info in self.my_info_buffer]))
             self.logger.record("oren/goal", safe_mean([ep_info["goal"] for ep_info in self.my_info_buffer]))
 
-        if self.n_calls % self.check_freq == 0:
-            # Retrieve training reward
-            # x is time array & y is reward array
-            x, y = ts2xy(load_results(self.log_dir), "timesteps")
-            if len(x) > 0:
-                # Mean training reward over the last 100 episodes
-                mean_reward = np.mean(y[-100:])
-                if self.verbose >= 1:
-                    print(f"Num timesteps: {self.num_timesteps}")
-                    print(
-                        f"Best mean reward:{self.best_mean_reward:.2f}-Last mean reward per episode: {mean_reward:.2f}")
-
-                # New best model, you could save the agent here
-                if mean_reward > self.best_mean_reward:
-                    self.best_mean_reward = mean_reward
-                    # Example for saving best model
-                    if self.verbose >= 1:
-                        print(f"Saving new best model to {self.save_path}")
-                    self.model.save(self.save_path)
-                    self.model.save(self.models_dir)
+        # if self.n_calls % self.check_freq == 0:
+        #     # Retrieve training reward
+        #     # x is time array & y is reward array
+        #     x, y = ts2xy(load_results(self.log_dir), "timesteps")
+        #     if len(x) > 0:
+        #         # Mean training reward over the last 100 episodes
+        #         mean_reward = np.mean(y[-100:])
+        #         if self.verbose >= 1:
+        #             print(f"Num timesteps: {self.num_timesteps}")
+        #             print(
+        #                 f"Best mean reward:{self.best_mean_reward:.2f}-Last mean reward per episode: {mean_reward:.2f}")
+        #
+        #         # New best model, you could save the agent here
+        #         if mean_reward > self.best_mean_reward:
+        #             self.best_mean_reward = mean_reward
+        #             # Example for saving best model
+        #             if self.verbose >= 1:
+        #                 print(f"Saving new best model to {self.save_path}")
+        #             self.model.save(self.save_path)
+        #             self.model.save(self.models_dir)
         return True
 
 
@@ -175,7 +176,7 @@ policy_type = "PPO"
 stats_window_size = 100
 # Everything in the config dict is saved to wandb
 config = {
-    "total_timesteps": 25000,
+    "total_timesteps": 250000,
     "env_name": "JSBSim-v0",
 }
 
@@ -192,13 +193,15 @@ elif policy_type == "SAC":
 log_dir = f"logs/" + datetime.now().strftime("%H_%M_%S")
 os.makedirs(log_dir, exist_ok=True)
 #
-env = PositionReward(JSBSimEnv(), 1e-2)
-env = Monitor(env, log_dir)
+# env = PositionReward(JSBSimEnv(), 1e-2)
+# env = Monitor(env, log_dir)
 
 parser = get_config()
 all_args = parse_args(sys.argv[1:], parser)
-# env = SingleControlEnv(all_args.scenario_name)  # make_render_env(all_args)
-# env = Monitor(env, log_dir)
+env = SingleControlEnv(all_args.scenario_name)  # make_render_env(all_args)
+vec_env = DummyVecEnv()
+vec_env = make_vec_env("JSBSim-v0", n_envs=10)
+# env = Monitor(vec_env, log_dir)
 # num_agents = all_args.num_agents
 
 models_dir = f"models/best_" + policy_type + "_model"
@@ -215,7 +218,7 @@ models_dir = f"models/best_" + policy_type + "_model"
 #     if policy_type == "SAC":
 #         model = SAC('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto')
 #     if policy_type == "PPO":
-model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='cpu')
+model = PPO('MlpPolicy', vec_env, verbose=1, tensorboard_log=log_dir, device='auto') #  policy_kwargs=policy_kwargs,
 # learning_rate=linear_schedule(0.001)
 
 model._stats_window_size = stats_window_size
