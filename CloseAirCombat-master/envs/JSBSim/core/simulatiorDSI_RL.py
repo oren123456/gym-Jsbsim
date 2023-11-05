@@ -4,9 +4,8 @@ import numpy as np
 from collections import deque
 from abc import ABC, abstractmethod
 from typing import Literal, Union, List
-
-import dsiExec
-from .catalog import Property, Catalog
+from .dsiExec_RL import DSIExec
+from .catalogDSI_RL import Property, Catalog
 from ..utils.utils import get_root_dir, LLA2NEU, NEU2LLA
 
 TeamColors = Literal["Red", "Blue", "Green", "Violet", "Orange"]
@@ -163,12 +162,12 @@ class AircraftSimulator(BaseSimulator):
 
         # load JSBSim FDM
 
-        self.dsisim_exec = dsiExec.DSIExec()
+        self.dsisim_exec = DSIExec()
         # self.dsisim_exec = jsbsim.FGFDMExec(os.path.join(get_root_dir(), 'data'))
         # self.jsbsim_exec.set_debug_level(0)
         # self.jsbsim_exec.load_model(self.model)
-        Catalog.add_jsbsim_props(self.jsbsim_exec.query_property_catalog(""))
-        self.jsbsim_exec.set_dt(self.dt)
+       # Catalog.add_jsbsim_props(self.dsisim_exec.query_property_catalog(""))
+        self.dsisim_exec.set_dt(self.dt)
         self.clear_defalut_condition()
 
         # assign new properties
@@ -178,16 +177,16 @@ class AircraftSimulator(BaseSimulator):
             self.lon0, self.lat0, self.alt0 = new_origin
         for key, value in self.init_state.items():
             self.set_property_value(Catalog[key], value)
-        success = self.jsbsim_exec.run_ic()
+        success = self.dsisim_exec.run_ic()
         if not success:
             raise RuntimeError("JSBSim failed to init simulation conditions.")
 
         # propulsion init running
-        propulsion = self.jsbsim_exec.get_propulsion()
-        n = propulsion.get_num_engines()
-        for j in range(n):
-            propulsion.get_engine(j).init_running()
-        propulsion.get_steady_state()
+        # propulsion = self.jsbsim_exec.get_propulsion()
+        # n = propulsion.get_num_engines()
+        # for j in range(n):
+        #     propulsion.get_engine(j).init_running()
+        # propulsion.get_steady_state()
         # update inner property
         self._update_properties()
 
@@ -222,7 +221,7 @@ class AircraftSimulator(BaseSimulator):
         if self.is_alive:
             if self.bloods <= 0:
                 self.shotdown()
-            result = self.jsbsim_exec.run()
+            result = self.dsisim_exec.run()
             if not result:
                 raise RuntimeError("JSBSim failed.")
             self._update_properties()
@@ -232,8 +231,8 @@ class AircraftSimulator(BaseSimulator):
 
     def close(self):
         """ Closes the simulation and any plots. """
-        if self.jsbsim_exec:
-            self.jsbsim_exec = None
+        if self.dsisim_exec:
+            self.dsisim_exec = None
         self.partners = []
         self.enemies = []
 
@@ -260,7 +259,7 @@ class AircraftSimulator(BaseSimulator):
 
     def get_sim_time(self):
         """ Gets the simulation time from JSBSim, a float. """
-        return self.jsbsim_exec.get_sim_time()
+        return self.dsisim_exec.get_sim_time()
 
     def get_property_values(self, props):
         """Get the values of the specified properties
@@ -294,7 +293,7 @@ class AircraftSimulator(BaseSimulator):
             if prop.access == "R":
                 if prop.update:
                     prop.update(self)
-            return self.jsbsim_exec.get_property_value(prop.name_jsbsim)
+            return self.dsisim_exec.get_property_value(prop.name_dsisim)
         else:
             raise ValueError(f"prop type unhandled: {type(prop)} ({prop})")
 
@@ -312,7 +311,7 @@ class AircraftSimulator(BaseSimulator):
             elif value > prop.max:
                 value = prop.max
 
-            self.jsbsim_exec.set_property_value(prop.name_jsbsim, value)
+            self.dsisim_exec.set_property_value(prop.name_dsisim, value)
 
             if "W" in prop.access:
                 if prop.update:

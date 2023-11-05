@@ -11,8 +11,8 @@ import numpy as np
 from pathlib import Path
 import setproctitle
 from config import get_config
-from runner.share_jsbsim_runner import ShareJSBSimRunner
-from envs.JSBSim.envs import SingleCombatEnv,  MultipleCombatEnv
+from runner.dsisim_runner import DSISimRunner
+# from envs.JSBSim.envs import SingleCombatEnv,  MultipleCombatEnv
 from envs.JSBSim.envs.singlecontrol_env_dsi import SingleControlEnv
 from envs.env_wrappers import SubprocVecEnv, DummyVecEnv, ShareSubprocVecEnv, ShareDummyVecEnv
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
@@ -20,12 +20,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath
 def make_train_env(all_args):
     def get_env_fn(rank):
         def init_env():
-            if all_args.env_name == "SingleCombat":
-                env = SingleCombatEnv(all_args.scenario_name)
-            elif all_args.env_name == "SingleControl":
+            # if all_args.env_name == "SingleCombat":
+            #     env = SingleCombatEnv(all_args.scenario_name)
+            if all_args.env_name == "SingleControl":
                 env = SingleControlEnv(all_args.scenario_name)
-            elif all_args.env_name == "MultipleCombat":
-                env = MultipleCombatEnv(all_args.scenario_name)
+            # elif all_args.env_name == "MultipleCombat":
+            #     env = MultipleCombatEnv(all_args.scenario_name)
             else:
                 logging.error("Can not support the " + all_args.env_name + "environment.")
                 raise NotImplementedError
@@ -147,14 +147,14 @@ def main(args):
     }
 
     # run experiments
-    if all_args.env_name == "MultipleCombat":
-        runner = ShareJSBSimRunner(config)
+    # if all_args.env_name == "MultipleCombat":
+    #     runner = ShareJSBSimRunner(config)
+    # else:
+    if all_args.use_selfplay:
+        from runner.selfplay_jsbsim_runner import SelfplayJSBSimRunner as Runner
     else:
-        if all_args.use_selfplay:
-            from runner.selfplay_jsbsim_runner import SelfplayJSBSimRunner as Runner
-        else:
-            from runner.dsisim_runner import DSISimRunner as Runner
-        runner = Runner(config)
+        from runner.dsisim_runner import DSISimRunner as Runner
+    runner = Runner(config)
     try:
         runner.run()
     except BaseException:

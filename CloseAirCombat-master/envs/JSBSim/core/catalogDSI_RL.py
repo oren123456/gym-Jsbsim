@@ -23,15 +23,15 @@ class DSICatalog(Property, Enum):
 
     # position and attitude
 
-    position_h_sl_ft = Property("ac-rl.ac-data.pos.alt", "altitude above mean sea level [ft]", -1400, 85000)
+    position_h_sl_ft = Property("position/h_sl_ft", "altitude above mean sea level [ft]", -1400, 85000)
     position_h_agl_ft = Property("position/h-agl-ft", "altitude above ground level [ft]", position_h_sl_ft.min, position_h_sl_ft.max)
-    attitude_pitch_rad = Property("ac-rl.ac-data.pitch", "pitch [rad]", -0.5 * math.pi, 0.5 * math.pi, access="R")
+    attitude_pitch_rad = Property("attitude/pitch-rad", "pitch [rad]", -0.5 * math.pi, 0.5 * math.pi, access="R")
     attitude_theta_rad = Property("attitude/theta-rad", "rad", access="R")
     attitude_theta_deg = Property("attitude/theta-deg", "deg", access="R")
-    attitude_roll_rad = Property("ac-rl.ac-data.roll", "roll [rad]", -math.pi, math.pi, access="R")
+    attitude_roll_rad = Property("attitude/roll-rad", "roll [rad]", -math.pi, math.pi, access="R")
     attitude_phi_rad = Property("attitude/phi-rad", "rad", access="R")
     attitude_phi_deg = Property("attitude/phi-deg", "deg", access="R")
-    attitude_heading_true_rad = Property("ac-rl.ac-data.heading", "rad", access="R")
+    attitude_heading_true_rad = Property("attitude/heading_true_rad", "rad", access="R")
     attitude_psi_deg = Property("attitude/psi-deg", "heading [deg]", 0, 360, access="R")
     attitude_psi_rad = Property("attitude/psi-rad", "rad", access="R")
     aero_beta_deg = Property("aero/beta-deg", "sideslip [deg]", -180, +180, access="R")
@@ -66,9 +66,9 @@ class DSICatalog(Property, Enum):
     velocities_u_fps = Property("velocities/u-fps", "body frame x-axis velocity [ft/s]", -2200, 2200, access="R")
     velocities_v_fps = Property("velocities/v-fps", "body frame y-axis velocity [ft/s]", -2200, 2200, access="R")
     velocities_w_fps = Property("velocities/w-fps", "body frame z-axis velocity [ft/s]", -2200, 2200, access="R")
-    velocities_v_north_fps = Property("ac-rl.ac-data.vel.north", "velocity true north [ft/s]", -2200, 2200, access="R")
-    velocities_v_west_fps = Property("ac-rl.ac-data.vel.west", "velocity west [ft/s]", -2200, 2200, access="R")
-    velocities_v_up_fps = Property("ac-rl.ac-data.vel.up", "velocity upwards [ft/s]", -2200, 2200, access="R")
+    velocities_v_north_fps = Property("velocities/v-north-fps", "velocity true north [ft/s]", -2200, 2200, access="R")
+    velocities_v_west_fps = Property("velocities/v-west-fps", "velocity west [ft/s]", -2200, 2200, access="R")
+    velocities_v_up_fps = Property("velocities/v-up-fps", "velocity upwards [ft/s]", -2200, 2200, access="R")
     velocities_v_east_fps = Property("velocities/v-east-fps", "velocity east [ft/s]", -2200, 2200, access="R")
     velocities_v_down_fps = Property("velocities/v-down-fps", "velocity downwards [ft/s]", -2200, 2200, access="R")
     velocities_vc_fps = Property("velocities/vc-fps", "airspeed in knots", 0, 4400, access="R")
@@ -195,10 +195,10 @@ class DSICatalog(Property, Enum):
     def update_equal_brake_cmd(sim):
         DSICatalog.update_equal_brake_props(sim)
 
-    fcs_aileron_cmd_norm = Property("rl-dsi.joystick-x", "aileron commanded position, normalised", -1.0, 1.0)
-    fcs_elevator_cmd_norm = Property("rl-dsi.joystick-y", "elevator commanded position, normalised", -1.0, 1.0)
+    fcs_aileron_cmd_norm = Property("fcs/aileron-cmd-norm", "aileron commanded position, normalised", -1.0, 1.0)
+    fcs_elevator_cmd_norm = Property("fcs/elevator-cmd-norm", "elevator commanded position, normalised", -1.0, 1.0)
     fcs_rudder_cmd_norm = Property("extra-data.fcs.rudder-cmd-norm", "rudder commanded position, normalised", -1.0, 1.0)
-    fcs_throttle_cmd_norm = Property("rl-dsi.throttle", "throttle commanded position, normalised", 0.0, 0.9)  # , update=update_equal_throttle_cmd
+    fcs_throttle_cmd_norm = Property("fcs/throttle-cmd-norm", "throttle commanded position, normalised", 0.0, 0.9)  # , update=update_equal_throttle_cmd
     fcs_mixture_cmd_norm = Property("fcs/mixture-cmd-norm", "engine mixture setting, normalised", 0.0, 1.0)  # , update=update_equal_mixture_cmd
     gear_gear_cmd_norm = Property("gear/gear-cmd-norm", "all landing gear commanded position, normalised", 0.0, 1.0)
     fcs_speedbrake_cmd_norm = Property("fcs/speedbrake-cmd-norm", "normalised")
@@ -221,7 +221,7 @@ class DSICatalog(Property, Enum):
     ic_start_velocity_dsi = Property("rl-dsi.dsi-ctrl-data.start-velocity", "set starting velocity in dsi; positive forward [ft/s]", 0)
 
     # initial conditions
-    ic_h_sl_ft = Property("rl-dsi.dsi-ctrl-data.start-pos.alt", "initial altitude MSL [ft]", position_h_sl_ft.min, position_h_sl_ft.max)
+    ic_h_sl_ft = Property("ic/h-sl-ft", "initial altitude MSL [ft]", position_h_sl_ft.min, position_h_sl_ft.max)
     ic_h_agl_ft = Property("ic/h-agl-ft", "", position_h_sl_ft.min, position_h_sl_ft.max)
     ic_geod_alt_ft = Property("ic/geod-alt-ft", "ft")
     ic_sea_level_radius_ft = Property("ic/sea-level-radius-ft", "ft")

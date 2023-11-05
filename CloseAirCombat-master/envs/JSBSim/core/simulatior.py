@@ -60,7 +60,7 @@ class BaseSimulator(ABC):
         """(v_north, v_east, v_up), unit: m/s"""
         return self._velocity
 
-    def reload(self):FV
+    def reload(self):
         self._geodetic = np.zeros(3)
         self._position = np.zeros(3)
         self._posture = np.zeros(3)
