@@ -1,11 +1,16 @@
 *.gif
 jsbsim-gym-main/logs
-sbsim-gym-main/venv/Lib/site-packages
+jsbsim-gym-main/venv/Lib/site-packages
 jsbsim-gym-main/jsbsim_gym/__pycache__
 jsbsim-gym-main/jsbsim_gym/visualization/__pycache__
-
 jsbsim-gym-main/wandb
-CloseAirCombat-master/tests/wandb
-CloseAirCombat-master/tests/models
+CloseAirCombat-master/tests/
 CloseAirCombat-master/scripts/train/wandb
+CloseAirCombat-master/tests/runs/
+CloseAirCombat-master/scripts/results/
 *.pyc
+CloseAirCombat-master - Copy/
+jsbsim-gym-main - Copy/
+jsbsim/
+
+
