@@ -226,19 +226,19 @@ class DSICatalog(Property, Enum):
     ic_geod_alt_ft = Property("ic/geod-alt-ft", "ft")
     ic_sea_level_radius_ft = Property("ic/sea-level-radius-ft", "ft")
     ic_terrain_elevation_ft = Property("extra-data.ic.terrain-elevation-ft", "ft")
-    ic_long_gc_deg = Property("extra-data.ic.long-gc-deg", "initial geocentric longitude [deg]", access="W",
+    ic_long_gc_deg = Property("ic/long-gc-deg", "initial geocentric longitude [deg]", access="W",
                               update=lambda sim: sim.set_property_value(
                                   DSICatalog.ic_long_gc_rad,
                                   sim.get_property_value(DSICatalog.ic_long_gc_deg) * 0.017453))
     ic_long_gc_rad = Property("rl-dsi.dsi-ctrl-data.start-pos.lon", "rad")
     ic_lat_gc_deg = Property("ic/lat-gc-deg", "deg")
     ic_lat_gc_rad = Property("ic/lat-gc-rad", "rad")
-    ic_lat_geod_deg = Property("extra-data.ic.lat-geod-deg", "initial geodesic latitude [deg]", access="W",
+    ic_lat_geod_deg = Property("ic/lat-geod-deg", "initial geodesic latitude [deg]", access="W",
                                update=lambda sim: sim.set_property_value(
                                    DSICatalog.ic_lat_geod_rad,
                                    sim.get_property_value(DSICatalog.ic_lat_geod_deg) * 0.017453))
     ic_lat_geod_rad = Property("rl-dsi.dsi-ctrl-data.start-pos.lat", "rad")
-    ic_psi_true_deg = Property("extra-data.ic.psi_true_deg", "initial (true) heading [deg]",attitude_psi_deg.min, attitude_psi_deg.max,
+    ic_psi_true_deg = Property("ic/psi-true-deg", "initial (true) heading [deg]",attitude_psi_deg.min, attitude_psi_deg.max,
                                access="W",
                                update=lambda sim: sim.set_property_value(
                                    DSICatalog.ic_psi_true_rad,
@@ -255,12 +255,12 @@ class DSICatalog(Property, Enum):
     ic_gamma_deg = Property("ic/gamma-deg", "deg")
     ic_gamma_rad = Property("ic/gamma-rad", "rad")
     ic_mach = Property("ic/mach", "")
-    ic_u_fps = Property("extra-data.ic.v-fps", "body frame x-axis velocity; positive forward [ft/s]", access="W",
+    ic_u_fps = Property("ic/u-fps", "body frame x-axis velocity; positive forward [ft/s]", access="W",
                         update=lambda sim: sim.set_property_value(
                             DSICatalog.ic_start_velocity_dsi,
                             sim.get_property_value(DSICatalog.ic_u_fps)))
-    ic_v_fps = Property("extra-data.ic.v-fps", "body frame y-axis velocity; positive right [ft/s]")
-    ic_w_fps = Property("extra-data.ic.w-fps", "body frame z-axis velocity; positive down [ft/s]")
+    ic_v_fps = Property("ic/v-fps", "body frame y-axis velocity; positive right [ft/s]")
+    ic_w_fps = Property("ic/w-fps", "body frame z-axis velocity; positive down [ft/s]")
     ic_p_rad_sec = Property("extra-data.ic.p-rad_sec", "roll rate [rad/s]")
     ic_q_rad_sec = Property("extra-data.ic.q-rad_sec", "pitch rate [rad/s]")
     ic_r_rad_sec = Property("extra-data.ic.r-rad_sec", "yaw rate [rad/s]")
