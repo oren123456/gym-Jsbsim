@@ -1,12 +1,13 @@
 import sys
-import gymnasium as gym
+import gymnasium
 import jsbsim_gym.jsbsim_gym  # This line makes sure the environment is registered
 from jsbsim_gym.features import JSBSimFeatureExtractor
-from stable_baselines3 import SAC, PPO
+from stable_baselines3 import SAC, PPO, common
 import time
 import os
 from typing import Callable
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common import env_checker
 import numpy as np
 from stable_baselines3.common.results_plotter import load_results, ts2xy
 from stable_baselines3.common.monitor import Monitor
@@ -15,18 +16,20 @@ from stable_baselines3.common.utils import safe_mean
 import wandb
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3.common.logger import Logger, KVWriter, HumanOutputFormat
-from typing import Any, Dict,  Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from datetime import datetime
 from config import get_config
-from envs.JSBSim.envs import SingleCombatEnv, SingleControlEnv, MultipleCombatEnv
+
+# from envs.JSBSim.envs import SingleCombatEnv, SingleControlEnv, MultipleCombatEnv
 from envs.env_wrappers import DummyVecEnv, ShareDummyVecEnv
 import logging
 
-from jsbsim_gym.jsbsim_gym import JSBSimEnv,PositionReward
+from jsbsim_gym.jsbsim_gym import JSBSimEnv, PositionReward
 
 
 class WandbOutputFormat(KVWriter):
     """   Dumps key/value pairs into TensorBoard's numeric format.   """
+
     def __init__(self, config: Dict = None, project: Optional[str] = None, name: Optional[str] = None):
         self.run = wandb.init(
             project=project,
@@ -146,26 +149,26 @@ def parse_args(args, parser):
     return parser.parse_known_args(args)[0]
 
 
-def make_render_env(all_args):
-    def get_env_fn(rank):
-        def init_env():
-            if all_args.env_name == "SingleCombat":
-                env = SingleCombatEnv(all_args.scenario_name)
-            elif all_args.env_name == "SingleControl":
-                env = SingleControlEnv(all_args.scenario_name)
-            elif all_args.env_name == "MultipleCombat":
-                env = MultipleCombatEnv(all_args.scenario_name)
-            else:
-                logging.error("Can not support the " + all_args.env_name + "environment.")
-                raise NotImplementedError
-            env.seed(all_args.seed + rank * 1000)
-            return env
-        return init_env
-    if all_args.env_name == "MultipleCombat":
-        return ShareDummyVecEnv([get_env_fn(0)])
-    else:
-        # return DummyVecEnv([get_env_fn(0)])
-        return get_env_fn(0)
+# def make_render_env(all_args):
+#     def get_env_fn(rank):
+#         def init_env():
+#             if all_args.env_name == "SingleCombat":
+#                 env = SingleCombatEnv(all_args.scenario_name)
+#             elif all_args.env_name == "SingleControl":
+#                 env = SingleControlEnv(all_args.scenario_name)
+#             elif all_args.env_name == "MultipleCombat":
+#                 env = MultipleCombatEnv(all_args.scenario_name)
+#             else:
+#                 logging.error("Can not support the " + all_args.env_name + "environment.")
+#                 raise NotImplementedError
+#             env.seed(all_args.seed + rank * 1000)
+#             return env
+#         return init_env
+#     if all_args.env_name == "MultipleCombat":
+#         return ShareDummyVecEnv([get_env_fn(0)])
+#     else:
+#         # return DummyVecEnv([get_env_fn(0)])
+#         return get_env_fn(0)
 
 # print("Sample Action:", env.action_space.sample())
 # print("Observation Space:", env.observation_space.shape)
@@ -175,25 +178,19 @@ policy_type = "PPO"
 stats_window_size = 100
 # Everything in the config dict is saved to wandb
 config = {
-    "total_timesteps": 25000,
+    "total_timesteps": 2500000,
     "env_name": "JSBSim-v0",
 }
 
-if policy_type == "PPO":
-    policy_kwargs = dict(
-        features_extractor_class=JSBSimFeatureExtractor,
-    )
-elif policy_type == "SAC":
-    policy_kwargs = dict(
-        features_extractor_class=JSBSimFeatureExtractor,
-        use_sde=False
-    )
+# policy_kwargs = dict(features_extractor_class=JSBSimFeatureExtractor, )
 
 log_dir = f"logs/" + datetime.now().strftime("%H_%M_%S")
 os.makedirs(log_dir, exist_ok=True)
 #
 env = PositionReward(JSBSimEnv(), 1e-2)
 env = Monitor(env, log_dir)
+
+env_checker.check_env(env)
 
 parser = get_config()
 all_args = parse_args(sys.argv[1:], parser)
@@ -215,21 +212,22 @@ models_dir = f"models/best_" + policy_type + "_model"
 #     if policy_type == "SAC":
 #         model = SAC('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto')
 #     if policy_type == "PPO":
-model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='cpu')
+
+#policy_kwargs=policy_kwargs,
+model = PPO('MlpPolicy', env, verbose=1,  tensorboard_log=log_dir, device='cpu')
 # learning_rate=linear_schedule(0.001)
 
-model._stats_window_size = stats_window_size
+# model._stats_window_size = stats_window_size
 callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir,
-                                            stats_window_size=model.stats_window_size)
+                                            stats_window_size=stats_window_size)
 
-logger = Logger(folder=log_dir, output_formats=[WandbOutputFormat(name=datetime.now().strftime("%H:%M:%S"),
-                                                                  project="FlyToPoint", config=config),
+logger = Logger(folder=log_dir, output_formats=[WandbOutputFormat(name=datetime.now().strftime("%H:%M:%S"),  project="FlyToPoint", config=config),
                                                 HumanOutputFormat(sys.stdout)])
 model.set_logger(logger)
 
 # for i in range(1, 2):
-model.learn(total_timesteps=int(config["total_timesteps"]), callback=[callback, WandbCallback()])
-logger.close()
+model.learn(total_timesteps=int(config["total_timesteps"]), )  # callback=[callback, WandbCallback()]
+# logger.close()
 env.close()
 
 # Usefull

@@ -1,6 +1,9 @@
-torch~=2.0.1+cu117
+torch~=2.0.0+cu117
 JSBSim~=1.1.13
 gymnasium~=0.28.1
 numpy~=1.25.2
 pygame~=2.3.0
 moderngl~=5.8.2
+gym~=0.21.0
+pymap3d~=3.0.1
+wandb~=0.15.12

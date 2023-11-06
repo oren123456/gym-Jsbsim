@@ -1,16 +1,10 @@
-*.gif
-jsbsim-gym-main/logs
-jsbsim-gym-main/venv/Lib/site-packages
-jsbsim-gym-main/jsbsim_gym/__pycache__
-jsbsim-gym-main/jsbsim_gym/visualization/__pycache__
-jsbsim-gym-main/wandb
-CloseAirCombat-master/tests/
-CloseAirCombat-master/scripts/train/wandb
-CloseAirCombat-master/tests/runs/
-CloseAirCombat-master/scripts/results/
+*/__pycache__/
+*/*/__pycache__/
+*/*/*/__pycache__/
+*/*/*/*/__pycache__/
+*/logs/
+*/logs/13_08_31/PPO_1/events.out.tfevents.1699268911.DESKTOP-GC0AHOC.3052.0
+jsbsim-gym-CloseAirCombat/logs/
+jsbsim-gym-CloseAirCombat/wandb/
+jsbsim-gym-CloseAirCombat/.idea/
 *.pyc
-CloseAirCombat-master - Copy/
-jsbsim-gym-main - Copy/
-jsbsim/
-
-

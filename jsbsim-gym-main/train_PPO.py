@@ -16,14 +16,7 @@ import wandb
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3.common.logger import Logger, KVWriter, HumanOutputFormat
 from typing import Any, Dict,  Optional, Tuple
-from datetime import datetime
-from config import get_config
-from envs.JSBSim.envs import SingleCombatEnv, SingleControlEnv, MultipleCombatEnv
-from envs.env_wrappers import DummyVecEnv, ShareDummyVecEnv
-import logging
-from stable_baselines3.common.env_util import make_vec_env
-
-from jsbsim_gym.jsbsim_gym import JSBSimEnv,PositionReward
+from datetime import datetime, date
 
 
 class WandbOutputFormat(KVWriter):
@@ -92,26 +85,26 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
             self.logger.record("oren/distance", safe_mean([ep_info["distance"] for ep_info in self.my_info_buffer]))
             self.logger.record("oren/goal", safe_mean([ep_info["goal"] for ep_info in self.my_info_buffer]))
 
-        # if self.n_calls % self.check_freq == 0:
-        #     # Retrieve training reward
-        #     # x is time array & y is reward array
-        #     x, y = ts2xy(load_results(self.log_dir), "timesteps")
-        #     if len(x) > 0:
-        #         # Mean training reward over the last 100 episodes
-        #         mean_reward = np.mean(y[-100:])
-        #         if self.verbose >= 1:
-        #             print(f"Num timesteps: {self.num_timesteps}")
-        #             print(
-        #                 f"Best mean reward:{self.best_mean_reward:.2f}-Last mean reward per episode: {mean_reward:.2f}")
-        #
-        #         # New best model, you could save the agent here
-        #         if mean_reward > self.best_mean_reward:
-        #             self.best_mean_reward = mean_reward
-        #             # Example for saving best model
-        #             if self.verbose >= 1:
-        #                 print(f"Saving new best model to {self.save_path}")
-        #             self.model.save(self.save_path)
-        #             self.model.save(self.models_dir)
+        if self.n_calls % self.check_freq == 0:
+            # Retrieve training reward
+            # x is time array & y is reward array
+            x, y = ts2xy(load_results(self.log_dir), "timesteps")
+            if len(x) > 0:
+                # Mean training reward over the last 100 episodes
+                mean_reward = np.mean(y[-100:])
+                if self.verbose >= 1:
+                    print(f"Num timesteps: {self.num_timesteps}")
+                    print(
+                        f"Best mean reward:{self.best_mean_reward:.2f}-Last mean reward per episode: {mean_reward:.2f}")
+
+                # New best model, you could save the agent here
+                if mean_reward > self.best_mean_reward:
+                    self.best_mean_reward = mean_reward
+                    # Example for saving best model
+                    if self.verbose >= 1:
+                        print(f"Saving new best model to {self.save_path}")
+                    self.model.save(self.save_path)
+                    self.model.save(self.models_dir)
         return True
 
 
@@ -136,38 +129,6 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
     return func
 
 
-def parse_args(args, parser):
-    group = parser.add_argument_group("JSBSim Env parameters")
-    group.add_argument('--episode-length', type=int, default=1000,
-                       help="the max length of an episode")
-    group.add_argument('--scenario-name', type=str, default='singlecombat_vsbaseline',
-                       help="number of fighters controlled by RL policy")
-    group.add_argument('--num-agents', type=int, default=1,
-                       help="number of fighters controlled by RL policy")
-    return parser.parse_known_args(args)[0]
-
-
-def make_render_env(all_args):
-    def get_env_fn(rank):
-        def init_env():
-            if all_args.env_name == "SingleCombat":
-                env = SingleCombatEnv(all_args.scenario_name)
-            elif all_args.env_name == "SingleControl":
-                env = SingleControlEnv(all_args.scenario_name)
-            elif all_args.env_name == "MultipleCombat":
-                env = MultipleCombatEnv(all_args.scenario_name)
-            else:
-                logging.error("Can not support the " + all_args.env_name + "environment.")
-                raise NotImplementedError
-            env.seed(all_args.seed + rank * 1000)
-            return env
-        return init_env
-    if all_args.env_name == "MultipleCombat":
-        return ShareDummyVecEnv([get_env_fn(0)])
-    else:
-        # return DummyVecEnv([get_env_fn(0)])
-        return get_env_fn(0)
-
 # print("Sample Action:", env.action_space.sample())
 # print("Observation Space:", env.observation_space.shape)
 # print("Observation Sample:", env.observation_space.sample())
@@ -176,7 +137,7 @@ policy_type = "PPO"
 stats_window_size = 100
 # Everything in the config dict is saved to wandb
 config = {
-    "total_timesteps": 250000,
+    "total_timesteps": 25000,
     "env_name": "JSBSim-v0",
 }
 
@@ -190,35 +151,29 @@ elif policy_type == "SAC":
         use_sde=False
     )
 
+local_time = time.localtime(time.time())
 log_dir = f"logs/" + datetime.now().strftime("%H_%M_%S")
 os.makedirs(log_dir, exist_ok=True)
-#
-# env = PositionReward(JSBSimEnv(), 1e-2)
-# env = Monitor(env, log_dir)
 
-parser = get_config()
-all_args = parse_args(sys.argv[1:], parser)
-env = SingleControlEnv(all_args.scenario_name)  # make_render_env(all_args)
-vec_env = DummyVecEnv()
-vec_env = make_vec_env("JSBSim-v0", n_envs=10)
-# env = Monitor(vec_env, log_dir)
-# num_agents = all_args.num_agents
+env = gym.make(config["env_name"])
+env = Monitor(env, log_dir)
 
 models_dir = f"models/best_" + policy_type + "_model"
-# if os.path.exists(models_dir + ".zip"):
-#     print("Continuing work on " + models_dir)
-#     if policy_type == "SAC":
-#         model = SAC.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
-#                          gradient_steps=-1, device='auto', )
-#     if policy_type == "PPO":
-#         model = PPO.load(models_dir, env, verbose=1,  policy_kwargs=policy_kwargs,
-#                          gradient_steps=-1, device='cpu', )
-# else:
-#     print("Creating a new model")
-#     if policy_type == "SAC":
-#         model = SAC('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto')
-#     if policy_type == "PPO":
-model = PPO('MlpPolicy', vec_env, verbose=1, tensorboard_log=log_dir, device='auto') #  policy_kwargs=policy_kwargs,
+if os.path.exists(models_dir + ".zip"):
+    print("Continuing work on " + models_dir)
+    if policy_type == "SAC":
+        model = SAC.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
+                         gradient_steps=-1, device='auto', )
+    if policy_type == "PPO":
+        model = PPO.load(models_dir, env, verbose=1,  policy_kwargs=policy_kwargs,
+                         gradient_steps=-1, device='cpu', )
+
+else:
+    print("Creating a new model")
+    if policy_type == "SAC":
+        model = SAC('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto')
+    if policy_type == "PPO":
+        model = PPO('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='cpu')
 # learning_rate=linear_schedule(0.001)
 
 model._stats_window_size = stats_window_size
@@ -236,7 +191,6 @@ logger.close()
 env.close()
 
 # Usefull
-# local_time = time.localtime(time.time())
 # run_name = f"{str(local_time.tm_mon)}_{str(local_time.tm_mday)}_{str(local_time.tm_year)}-{str(local_time.tm_hour)}_" \
 #            f"{str(local_time.tm_min)}_{str(local_time.tm_sec)}"
 # for i in range(1,100):

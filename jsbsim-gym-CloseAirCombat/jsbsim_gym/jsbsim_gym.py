@@ -8,6 +8,7 @@ from typing import Optional
 from .visualization.rendering import Viewer, load_mesh, load_shader, RenderObject, Grid
 from .visualization.quaternion import Quaternion
 from numpy.linalg import norm
+from gymnasium.utils import seeding
 
 import pymap3d
 
@@ -33,19 +34,16 @@ STATE_FORMAT = [
 STATE_LOW = np.array([
     -np.inf,
     -np.inf,
-    0,
-    0,
-    -np.pi,
-    -np.pi,
     -np.inf,
     -np.inf,
     -np.inf,
-    -np.pi,
-    -np.pi,
-    -np.pi,
     -np.inf,
     -np.inf,
-    0,
+    -np.inf,
+    -np.inf,
+    -np.inf,
+    -np.inf,
+    -np.inf,
 ])
 
 STATE_HIGH = np.array([
@@ -53,14 +51,11 @@ STATE_HIGH = np.array([
     np.inf,
     np.inf,
     np.inf,
-    np.pi,
-    np.pi,
     np.inf,
     np.inf,
     np.inf,
-    np.pi,
-    np.pi,
-    np.pi,
+    np.inf,
+    np.inf,
     np.inf,
     np.inf,
     np.inf,
@@ -100,6 +95,7 @@ class JSBSimEnv(gym.Env):
         super().__init__()
 
         # Set observation and action space format
+        self._geodetic = None
         self.ic_psi_true_deg = 0
         self.ic_h_sl_ft = 0
         self.ic_u_fps = 0
@@ -109,17 +105,20 @@ class JSBSimEnv(gym.Env):
         self.current_step = 0
         self.heading_turn_counts = 0
         self.heading_check_time = 0
-        self.acceleration_limit_x =  10.0
-        self.acceleration_limit_y =  10.0
-        self.acceleration_limit_z =  10.0
+        self.acceleration_limit_x = 10.0
+        self.acceleration_limit_y = 10.0
+        self.acceleration_limit_z = 10.0
         self.altitude_limit = 2500
         self.max_steps = 1000
         self.max_heading_increment = 180  # degree
-        self.max_altitude_increment = 7000 # feet
-        self.max_velocities_u_increment = 100 # meter
+        self.max_altitude_increment = 7000  # feet
+        self.max_velocities_u_increment = 100  # meter
 
-        self.observation_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (15,))
-        self.action_space = gym.spaces.Box(np.array([-1, -1, -1, 0]), 1, (4,))
+        self.observation_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (12,))
+        # self.observation_space = gym.spaces.Box(low=-10, high=10., shape=(21,))
+        self.action_space = gym.spaces.Box(-1, 1, (4,))
+        # self.action_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (15,))
+
         self.metadata["render_modes"] = ["rgb_array"]
         self.render_mode = "rgb_array"
 
@@ -127,7 +126,7 @@ class JSBSimEnv(gym.Env):
         self.simulation = jsbsim.FGFDMExec(root, None)
         self.simulation.set_debug_level(0)
         #  JSBSIM default dT is 0.0083 ( 1/120 ) per step
-        self.simulation.set_dt(1/60)
+        self.simulation.set_dt(1 / 60)
 
         # Load F-16 model and set initial conditions
         self.simulation.load_model('f16')
@@ -151,6 +150,12 @@ class JSBSimEnv(gym.Env):
 
         self.lon0, self.lat0, self.alt0 = (120.0, 60.0, 0.0)
 
+        self.np_random, seed = seeding.np_random(None)
+        self.increment_size = [0.2, 0.4, 0.6, 0.8, 1.0] + [1.0] * 10
+        self.check_interval = 30
+
+
+
     def _set_initial_conditions(self):
         # Set engines running, forward velocity, and altitude
         self.simulation.set_property_value('propulsion/set-running', -1)  # -1 refers to "All Engines"
@@ -160,7 +165,7 @@ class JSBSimEnv(gym.Env):
     def get_extreme_state(self):
         extreme_velocity = self.simulation.get_property_value("velocities/eci-velocity-mag-fps") >= 1e10
         extreme_rotation = (
-                norm([self.simulation.get_property_value("velocities/p-rad_sec")
+                norm([self.simulation.get_property_value("velocities/p-rad_sec"),
                       self.simulation.get_property_value("velocities/q-rad_sec"),
                       self.simulation.get_property_value("velocities/r-rad_sec"),
                       ]
@@ -176,18 +181,20 @@ class JSBSimEnv(gym.Env):
                     ]
                 ) > 1e1
         )  # acceleration larger than 10G
-        return  extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration
+        return extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration
 
     def _judge_overload(self, ):
         flag_overload = False
         simulation_sim_time_sec = self.simulation.get_property_value("simulation/sim-time-sec")
         if simulation_sim_time_sec > 10:
             if math.fabs(self.simulation.get_property_value("accelerations/n-pilot-x-norm")) > self.acceleration_limit_x \
-                    or math.fabs(self.simulation.get_property_value("accelerations/n-pilot-y-norm")) > self.acceleration_limit_y \
+                    or math.fabs(
+                self.simulation.get_property_value("accelerations/n-pilot-y-norm")) > self.acceleration_limit_y \
                     or math.fabs(
                 self.simulation.get_property_value("accelerations/n-pilot-z-norm") + 1) > self.acceleration_limit_z:
                 flag_overload = True
         return flag_overload
+
     def get_termination(self, ):
         # End up the simulation if the aircraft didn't reach the target heading in limited time.
         done = False
@@ -199,23 +206,23 @@ class JSBSimEnv(gym.Env):
                 done = True
             # if current target heading is reached, random generate a new target heading
             else:
-                delta = self.increment_size[env.heading_turn_counts]
-                self.target_heading_deg += (env.np_random.uniform(-delta,
+                delta = self.increment_size[self.heading_turn_counts]
+                self.target_heading_deg += (self.np_random.uniform(-delta,
                                                                   delta) * self.max_heading_increment + 360) % 360
-                self.target_altitude_ft += env.np_random.uniform(-delta, delta) * self.max_altitude_increment
-                self.target_velocities_u_mps += env.np_random.uniform(-delta, delta) * self.max_velocities_u_increment
+                self.target_altitude_ft += self.np_random.uniform(-delta, delta) * self.max_altitude_increment
+                self.target_velocities_u_mps += self.np_random.uniform(-delta, delta) * self.max_velocities_u_increment
                 self.heading_check_time += self.check_interval
                 self.heading_turn_counts += 1
                 # self.log(f'current_step:{cur_step} target_heading:{new_heading} '
                 #          f'target_altitude_ft:{new_altitude} target_velocities_u_mps:{new_velocities_u}')
         # if done:
-            # self.log(f'agent[{agent_id}] unreached heading. Total Steps={env.current_step}')
-            # info['heading_turn_counts'] = env.heading_turn_counts
+        # self.log(f'agent[{agent_id}] unreached heading. Total Steps={env.current_step}')
+        # info['heading_turn_counts'] = env.heading_turn_counts
 
         # End up the simulation if the aircraft is on an extreme state.
         # if done:
-            # env.agents[agent_id].crash()
-            # self.log(f'{agent_id} is on an extreme state! Total Steps={env.current_step}')
+        # env.agents[agent_id].crash()
+        # self.log(f'{agent_id} is on an extreme state! Total Steps={env.current_step}')
 
         #   End up the simulation if acceleration are too high.
         # if done:
@@ -233,9 +240,10 @@ class JSBSimEnv(gym.Env):
         #     self.log(f"{agent_id} step limits! Total Steps={env.current_step}")
 
         # success = False
-        return self.get_extreme_state() or env.current_step >= self.max_steps or env.current_step >= self.max_steps or \
+        return self.get_extreme_state() or self.current_step >= self.max_steps or \
             (self.simulation.get_property_value("position/h-sl-ft") * 0.3048) <= self.altitude_limit or \
             self._judge_overload() or done
+
     def get_reward(self, ):
         # Heading reward
         heading_error_scale = 5.0  # degrees
@@ -270,10 +278,11 @@ class JSBSimEnv(gym.Env):
             PH = np.clip(ego_z / self.danger_altitude, 0., 1.) - 1. - 1.
         new_reward = Pv + PH
 
-        return reward+new_reward
+        return reward + new_reward
 
     def get_delta_heading(self):
         return self.target_heading_deg - self.simulation.get_property_value("attitude/psi-deg")
+
     def step(self, action):
         self.current_step += 1
 
@@ -297,13 +306,14 @@ class JSBSimEnv(gym.Env):
             self.simulation.run()
 
         # Get the JSBSim state and save to self.state
-        self._get_state()
+        obs = self._get_state()
 
         reward = self.get_reward()
         done = self.get_termination()
 
         ep_info = {"goal": 0}
-        return np.hstack([self.state, self.goal], dtype=np.float32), reward, done, False, ep_info
+       # return np.hstack([self.state, self.goal], dtype=np.float32), reward, done, False#, ep_info
+        return obs, reward, done, False , ep_info
 
     def _get_state(self):
         self.state[0] = self.target_altitude_ft - self.simulation.get_property_value("position/h-sl-ft")
@@ -317,8 +327,29 @@ class JSBSimEnv(gym.Env):
         self.state[8] = self.simulation.get_property_value("velocities/w-mps")  # v_body_z   (unit: m/s)
         self.state[9] = self.simulation.get_property_value("velocities/vc-mps")  # vc        (unit: m/s)
 
+        self._geodetic = [self.simulation.get_property_value("position/long-gc-deg"),
+                             self.simulation.get_property_value("position/lat-geod-deg"),
+                             self.simulation.get_property_value("position/h-sl-ft") * 0.3048]
+
+        norm_obs = np.zeros(12, dtype=np.float32)
+        norm_obs[0] = self.state[0] / 1000  # 0. ego delta altitude (unit: 1km)
+        norm_obs[1] = self.state[1] / 180 * np.pi  # 1. ego delta heading  (unit rad)
+        norm_obs[2] = self.state[2] / 340  # 2. ego delta velocities_u (unit: mh)
+        norm_obs[3] = self.state[3] / 5000  # 3. ego_altitude   (unit: 5km)
+        norm_obs[4] = np.sin(self.state[4])  # 4. ego_roll_sin
+        norm_obs[5] = np.cos(self.state[4])  # 5. ego_roll_cos
+        norm_obs[6] = np.sin(self.state[5])  # 6. ego_pitch_sin
+        norm_obs[7] = np.cos(self.state[5])  # 7. ego_pitch_cos
+        norm_obs[8] = self.state[6] / 340  # 8. ego_v_north    (unit: mh)
+        norm_obs[9] = self.state[7] / 340  # 9. ego_v_east     (unit: mh)
+        norm_obs[10] = self.state[8] / 340  # 10. ego_v_down    (unit: mh)
+        norm_obs[11] = self.state[9] / 340  # 11. ego_vc        (unit: mh)
+        return np.clip(norm_obs, self.observation_space.low, self.observation_space.high)
+
+
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        super().reset(seed=seed)
+        # super().reset() # seed=seed
+        obs = super().reset()
         self.simulation.run_ic()  # Initializes the sim from the initial condition object
         # Get state from JSBSim and save to self.state
         init_heading = self.np_random.uniform(0., 180.)
@@ -333,8 +364,15 @@ class JSBSimEnv(gym.Env):
         self.clear_defalut_condition()
         self.current_step = 0
         self.heading_turn_counts = 0
+        self._geodetic = np.zeros(3)
 
-        return np.hstack([self.state, self.goal], dtype=np.float32)
+        # self.goal[:2] = np.cos(bearing), np.sin(bearing)
+        # self.goal[:2] *= distance
+        # self.goal[2] = altitude
+
+        return self._get_state(), {}
+
+        # return np.hstack([self.state, self.goal], dtype=np.float32)
 
     def clear_defalut_condition(self):
         default_condition = {
@@ -353,7 +391,6 @@ class JSBSimEnv(gym.Env):
         }
         for prop, value in default_condition.items():
             self.simulation.set_property_value(prop, value)
-
 
     def render(self):
         scale = 1e-3
@@ -487,22 +524,22 @@ class PositionReward(gym.Wrapper):
 
     def step(self, action):
         obs, reward, done, _, info = super().step(action)
-        displacement = obs[-3:] - obs[:3]
-        distance = np.linalg.norm(displacement)
-        reward += self.gain * (self.last_distance - distance)
+        # displacement = obs[-3:] - obs[:3]
+        # distance = np.linalg.norm(displacement)
+        # reward += self.gain * (self.last_distance - distance)
         # print(obs)
         # h, p = calculate_hpr_difference(obs)
         # print(h)
-        self.last_distance = distance
-        info['distance'] = distance
+        # self.last_distance = distance
+        # info['distance'] = distance
         return obs, reward, done, False, info
 
     # def reset(self):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        obs = super().reset()
-        displacement = obs[-3:] - obs[:3]
-        self.last_distance = np.linalg.norm(displacement)
-        return obs, {}
+        # obs = super().reset()
+        # displacement = obs[-3:] - obs[:3]
+        # self.last_distance = np.linalg.norm(displacement)
+        return super().reset()
 
 
 # Create entry point to wrapped environment
