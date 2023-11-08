@@ -59,7 +59,7 @@ class DSIExec:
         self.dt = dt
 
     def run_ic(self, ):
-        print(f"run_ic.")
+        # print(f"run_ic.")
         self.lat = self._fields['ic/lat-geod-deg']
         self.long = self._fields['ic/long-gc-deg']
         # self._fields["position/h_sl_ft"] = self._fields['ic/h-sl-ft']
@@ -99,6 +99,33 @@ class DSIExec:
         self.e1 = 0.
         self.e2 = 0.
         self.e3 = math.sin(init_heading / 2)
+
+        air_density = 1.225 / (1. + 9.62 * pow(10., -5) * self.alt + 1.49 * pow(10., -8) * (pow(self.alt, 2)))
+        dyn_pres = 0.5 * air_density * pow(self.vel_forw, 2)
+        a = -1. / 80
+        b = 1 - 200 * a
+        xcl = a * self.vel_forw * METER_TO_KNOTS + b
+        if xcl < 1:
+            xcl = 1
+        if xcl > 2.5:
+            xcl = 2.5
+        # aerodynamic equations
+        aoa = math.atan2(self.vel_down, self.vel_forw)
+        if self.vel_forw < 250:  # m/s
+            lift_coef = 2.5 * aoa * xcl
+        else:
+            lift_coef = 3.5 * aoa * xcl
+
+        cdsb = FAcs_Drag_Factor * (1 - aoa / 0.3)
+        if cdsb < 0:
+            cdsb = 0
+        if cdsb > FAcs_Drag_Factor:
+            cdsb = FAcs_Drag_Factor
+
+        drag_coef = cdsb + (0.025 + 0.6 * (pow(lift_coef, 2))) * 1.25
+
+
+
         return True
 
     def set_property_value(self, field_names, value):
@@ -113,7 +140,7 @@ class DSIExec:
         return self.sdof_calculate_data()
 
     def sdof_calculate_data(self):
-        print(f"sdof_calculate_data.")
+        # print(f"sdof_calculate_data.")
         # double body_In[4][4];
         body_in = [[0.0] * 4 for _ in range(4)]
         # rotation matrix
@@ -131,19 +158,12 @@ class DSIExec:
 
         # print( body_in[3][1])
         # print(math.sqrt(1 - pow(body_in[3][1], 2)))
-        self._fields["attitude/pitch-rad"] = -math.atan2(body_in[3][1], math.sqrt(1 - pow(body_in[3][1], 2)))
+        # self._fields["attitude/pitch-rad"] = -math.atan2(body_in[3][1], math.sqrt(1 - pow(body_in[3][1], 2)))
         self._fields["attitude/heading_true_rad"] = math.atan2(body_in[2][1], body_in[1][1])
         self._fields["attitude/roll-rad"] = math.atan2(body_in[3][2], body_in[3][3])
 
-        # dynamic pressure
-        air_density = 1.225 / (
-                1. + 9.62 * pow(10., -5) * self.alt + 1.49 * pow(10., -8) * (pow(self.alt, 2)))
-        dyn_pres = 0.5 * air_density * pow(self.vel_forw, 2)
 
-        if self.vel_forw < 400:  # m/s
-            trust = (60000. / (1. + self.alt / 15000.) + 0. * self.vel_forw) * self._fields["fcs/throttle-cmd-norm"]
-        else:
-            trust = (60000. / (1. + self.alt / 15000.) + 0. * 300) * self._fields["fcs/throttle-cmd-norm"]
+
         a = -1. / 80
         b = 1 - 200 * a
         xcl = a * self.vel_forw * METER_TO_KNOTS + b
@@ -174,8 +194,12 @@ class DSIExec:
         yaw_moment_coef = 0.26 * side_slip - 0.08 * ROLL_CONST * self._fields["fcs/aileron-cmd-norm"] + yaw_coef * (
                 SDOF_GRAV_CENTER - 0.49) - 2.8 * self.head_rate / self.vel_forw
 
-        acc_forw = (dyn_pres * SDOF_WING_SURFACE * (
-                lift_coef * aoa - drag_coef) + trust) / SDOF_AC_WEIGHT + AC_GRAV_ACC * body_in[3][1]
+        # dynamic pressure
+        air_density = 1.225 / (1. + 9.62 * pow(10., -5) * self.alt + 1.49 * pow(10., -8) * (pow(self.alt, 2)))
+        dyn_pres = 0.5 * air_density * pow(self.vel_forw, 2)
+        trust = (60000. / (1. + self.alt / 15000.)) * self._fields["fcs/throttle-cmd-norm"]
+
+        acc_forw = (dyn_pres * SDOF_WING_SURFACE * ( lift_coef * aoa - drag_coef) + trust) / SDOF_AC_WEIGHT + AC_GRAV_ACC * body_in[3][1]
         acc_rght = dyn_pres * SDOF_WING_SURFACE * (yaw_coef - drag_coef * side_slip) / SDOF_AC_WEIGHT + AC_GRAV_ACC * \
                    body_in[3][2] - self.head_rate * self.vel_forw
         acc_down = dyn_pres * SDOF_WING_SURFACE * (-lift_coef - drag_coef * aoa) / SDOF_AC_WEIGHT + AC_GRAV_ACC * \
@@ -223,6 +247,7 @@ class DSIExec:
         e2dot = 0.5 * (self.e3 * self.roll_rate + self.e0 * self.pitch_rate - self.e1 * self.head_rate)
         e3dot = 0.5 * (-self.e2 * self.roll_rate + self.e1 * self.pitch_rate + self.e0 * self.head_rate)
 
+        print(e0dot)
         # components of rotation matrix(EULER ANGLES)
         self.e0 += (1.5 * e0dot - 0.5 * self.e0dotp) * self.dt
         self.e0dotp = e0dot

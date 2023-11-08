@@ -88,11 +88,11 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         # Add debug info at the end of each episode
-        if "episode" in self.locals['env'].buf_infos[0]:
-            info = self.locals['env'].buf_infos[0]
-            self.my_info_buffer.extend([{"distance": info['distance'], "goal": info['goal']}])
-            self.logger.record("oren/distance", safe_mean([ep_info["distance"] for ep_info in self.my_info_buffer]))
-            self.logger.record("oren/goal", safe_mean([ep_info["goal"] for ep_info in self.my_info_buffer]))
+        # if "episode" in self.locals['env'].buf_infos[0]:
+        #     info = self.locals['env'].buf_infos[0]
+        #     self.my_info_buffer.extend([{"distance": info['distance'], "goal": info['goal']}])
+        #     self.logger.record("oren/distance", safe_mean([ep_info["distance"] for ep_info in self.my_info_buffer]))
+        #     self.logger.record("oren/goal", safe_mean([ep_info["goal"] for ep_info in self.my_info_buffer]))
 
         if self.n_calls % self.check_freq == 0:
             # Retrieve training reward
@@ -103,8 +103,7 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
                 mean_reward = np.mean(y[-100:])
                 if self.verbose >= 1:
                     print(f"Num timesteps: {self.num_timesteps}")
-                    print(
-                        f"Best mean reward:{self.best_mean_reward:.2f}-Last mean reward per episode: {mean_reward:.2f}")
+                    print(f"Best mean reward:{self.best_mean_reward:.2f}-Last mean reward per episode: {mean_reward:.2f}")
 
                 # New best model, you could save the agent here
                 if mean_reward > self.best_mean_reward:
@@ -120,7 +119,6 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
 def linear_schedule(initial_value: float) -> Callable[[float], float]:
     """
     Linear learning rate schedule.
-
     :param initial_value: Initial learning rate.
     :return: schedule that computes
       current learning rate depending on remaining progress
@@ -129,7 +127,6 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
     def func(progress_remaining: float) -> float:
         """
         Progress will decrease from 1 (beginning) to 0.
-
         :param progress_remaining:
         :return: current learning rate
         """
@@ -138,15 +135,75 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
     return func
 
 
-def parse_args(args, parser):
-    group = parser.add_argument_group("JSBSim Env parameters")
-    group.add_argument('--episode-length', type=int, default=1000,
-                       help="the max length of an episode")
-    group.add_argument('--scenario-name', type=str, default='singlecombat_vsbaseline',
-                       help="number of fighters controlled by RL policy")
-    group.add_argument('--num-agents', type=int, default=1,
-                       help="number of fighters controlled by RL policy")
-    return parser.parse_known_args(args)[0]
+stats_window_size = 100
+# Everything in the config dict is saved to wandb
+config = {
+    "total_timesteps": 2500000,
+    "env_name": "JSBSim-v0",
+}
+
+log_dir = f"logs/" + datetime.now().strftime("%H_%M_%S")
+os.makedirs(log_dir, exist_ok=True)
+#
+env = PositionReward(JSBSimEnv(), 1e-2)
+env = Monitor(env, log_dir)
+
+env_checker.check_env(env)
+
+# policy_kwargs = dict(features_extractor_class=JSBSimFeatureExtractor, ) policy_kwargs=policy_kwargs,
+models_dir = f"models/best_PPO_model"
+if os.path.exists(models_dir + ".zip"):
+    print("Continuing work on " + models_dir)
+    model = PPO.load(models_dir, env, verbose=1, tensorboard_log=log_dir, gradient_steps=-1, device='auto', learning_rate=linear_schedule(0.001))
+else:
+    print("Creating a new model")
+    model = PPO('MlpPolicy', env, verbose=1, tensorboard_log=log_dir, device='auto', learning_rate=linear_schedule(0.001))
+
+callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir, stats_window_size=stats_window_size)
+logger = Logger(folder=log_dir, output_formats=[WandbOutputFormat(name=datetime.now().strftime("%H:%M:%S"), project="FlyToPoint", config=config),
+                                                HumanOutputFormat(sys.stdout)])
+model.set_logger(logger)
+
+# for i in range(1, 2):
+model.learn(total_timesteps=int(config["total_timesteps"]), callback=[callback])
+# logger.close() WandbCallback(gradient_save_freq=100, model_save_path=f"models/{run.id}", verbose=2)
+env.close()
+# run.finish()
+# run = wandb.init(
+#     project="sb3",
+#     config=config,
+#     sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
+#     # monitor_gym=True,  # auto-upload the videos of agents playing the game
+#     save_code=True,  # optional
+# )
+
+# Usefull
+# local_time = time.localtime(time.time())
+# run_name = f"{str(local_time.tm_mon)}_{str(local_time.tm_mday)}_{str(local_time.tm_year)}-{str(local_time.tm_hour)}_" \
+#            f"{str(local_time.tm_min)}_{str(local_time.tm_sec)}"
+# for i in range(1,100):
+#     model.learn(total_timesteps=TIMESTPES,reset_num_timesteps=False, tb_log_name=f"SAC-{int(time.time())}")
+# mean_params = model.get_parameters()
+# print("Sample Observation: ", env.observation_space.sample())
+# print("Sample Action: ", env.action_space.sample())
+# model.save(f"{models_dir}/{TIMESTPES*i}")
+# model.save("models/jsbsim_sac")
+# model.save_replay_buffer("models/jsbsim_sac_buffer")
+# print("Observation Space: ", env.observation_space.shape)
+
+#
+# def parse_args(args, parser):
+#     group = parser.add_argument_group("JSBSim Env parameters")
+#     group.add_argument('--episode-length', type=int, default=1000,
+#                        help="the max length of an episode")
+#     group.add_argument('--scenario-name', type=str, default='singlecombat_vsbaseline',
+#                        help="number of fighters controlled by RL policy")
+#     group.add_argument('--num-agents', type=int, default=1,
+#                        help="number of fighters controlled by RL policy")
+#     return parser.parse_known_args(args)[0]
+
+# parser = get_config()
+# all_args = parse_args(sys.argv[1:], parser)
 
 
 # def make_render_env(all_args):
@@ -173,73 +230,3 @@ def parse_args(args, parser):
 # print("Sample Action:", env.action_space.sample())
 # print("Observation Space:", env.observation_space.shape)
 # print("Observation Sample:", env.observation_space.sample())
-
-policy_type = "PPO"
-stats_window_size = 100
-# Everything in the config dict is saved to wandb
-config = {
-    "total_timesteps": 2500000,
-    "env_name": "JSBSim-v0",
-}
-
-# policy_kwargs = dict(features_extractor_class=JSBSimFeatureExtractor, )
-
-log_dir = f"logs/" + datetime.now().strftime("%H_%M_%S")
-os.makedirs(log_dir, exist_ok=True)
-#
-env = PositionReward(JSBSimEnv(), 1e-2)
-env = Monitor(env, log_dir)
-
-env_checker.check_env(env)
-
-parser = get_config()
-all_args = parse_args(sys.argv[1:], parser)
-# env = SingleControlEnv(all_args.scenario_name)  # make_render_env(all_args)
-# env = Monitor(env, log_dir)
-# num_agents = all_args.num_agents
-
-models_dir = f"models/best_" + policy_type + "_model"
-# if os.path.exists(models_dir + ".zip"):
-#     print("Continuing work on " + models_dir)
-#     if policy_type == "SAC":
-#         model = SAC.load(models_dir, env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs,
-#                          gradient_steps=-1, device='auto', )
-#     if policy_type == "PPO":
-#         model = PPO.load(models_dir, env, verbose=1,  policy_kwargs=policy_kwargs,
-#                          gradient_steps=-1, device='cpu', )
-# else:
-#     print("Creating a new model")
-#     if policy_type == "SAC":
-#         model = SAC('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=log_dir, device='auto')
-#     if policy_type == "PPO":
-
-#policy_kwargs=policy_kwargs,
-model = PPO('MlpPolicy', env, verbose=1,  tensorboard_log=log_dir, device='cpu')
-# learning_rate=linear_schedule(0.001)
-
-# model._stats_window_size = stats_window_size
-callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir,
-                                            stats_window_size=stats_window_size)
-
-logger = Logger(folder=log_dir, output_formats=[WandbOutputFormat(name=datetime.now().strftime("%H:%M:%S"),  project="FlyToPoint", config=config),
-                                                HumanOutputFormat(sys.stdout)])
-model.set_logger(logger)
-
-# for i in range(1, 2):
-model.learn(total_timesteps=int(config["total_timesteps"]), )  # callback=[callback, WandbCallback()]
-# logger.close()
-env.close()
-
-# Usefull
-# local_time = time.localtime(time.time())
-# run_name = f"{str(local_time.tm_mon)}_{str(local_time.tm_mday)}_{str(local_time.tm_year)}-{str(local_time.tm_hour)}_" \
-#            f"{str(local_time.tm_min)}_{str(local_time.tm_sec)}"
-# for i in range(1,100):
-#     model.learn(total_timesteps=TIMESTPES,reset_num_timesteps=False, tb_log_name=f"SAC-{int(time.time())}")
-# mean_params = model.get_parameters()
-# print("Sample Observation: ", env.observation_space.sample())
-# print("Sample Action: ", env.action_space.sample())
-# model.save(f"{models_dir}/{TIMESTPES*i}")
-# model.save("models/jsbsim_sac")
-# model.save_replay_buffer("models/jsbsim_sac_buffer")
-# print("Observation Space: ", env.observation_space.shape)

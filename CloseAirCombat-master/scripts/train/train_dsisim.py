@@ -168,5 +168,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, format="%(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     main(sys.argv[1:])
