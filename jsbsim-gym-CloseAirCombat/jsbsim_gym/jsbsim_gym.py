@@ -65,6 +65,14 @@ STATE_HIGH = np.array([
 RADIUS = 6.3781e6
 
 
+def log_info(self, infos, total_num_steps):
+    if self.use_wandb:
+        wandb.log({k: v for k, v in infos.items()}, step=total_num_steps)
+        # for k, v in infos.items():
+        #     wandb.log({k: v}, step=total_num_steps)
+    else:
+        pass
+
 class JSBSimEnv(gym.Env):
     """
     ### Description

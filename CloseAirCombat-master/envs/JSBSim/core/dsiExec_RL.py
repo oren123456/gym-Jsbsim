@@ -2,16 +2,13 @@ import math
 
 METER_TO_KNOTS = 3.280839 / 1.6887
 FAcs_Drag_Factor = 0.064
-MAX_SDOF_PARAM = 9
-SDOF_TRUST_FACTOR = 0
-SDOF_TRUST = 1
-SDOF_INERTIAL_MOM_X = 2
-SDOF_INERTIAL_MOM_Y = 3
-SDOF_INERTIAL_MOM_Z = 4
-SDOF_AC_WEIGHT = 5
-SDOF_WING_SURFACE = 6
-SDOF_WING_CHORD = 7
-SDOF_GRAV_CENTER = 8
+SDOF_INERTIAL_MOM_X = 5000
+SDOF_INERTIAL_MOM_Y = 68000
+SDOF_INERTIAL_MOM_Z = 79000
+SDOF_AC_WEIGHT = 9170
+SDOF_WING_SURFACE = 34.8
+SDOF_WING_CHORD = 8.04
+SDOF_GRAV_CENTER = 0.51
 AC_GRAV_ACC = 9.806  # m/s^2
 RAD_TO_DEG = 180. / math.pi
 DEG_TO_RAD = math.pi / 180
@@ -59,7 +56,7 @@ class DSIExec:
         self.dt = dt
 
     def run_ic(self, ):
-        print(f"run_ic.")
+        # print(f"run_ic.")
         self.lat = self._fields['ic/lat-geod-deg']
         self.long = self._fields['ic/long-gc-deg']
         # self._fields["position/h_sl_ft"] = self._fields['ic/h-sl-ft']
@@ -113,7 +110,7 @@ class DSIExec:
         return self.sdof_calculate_data()
 
     def sdof_calculate_data(self):
-        print(f"sdof_calculate_data.")
+        # print(f"sdof_calculate_data.")
         # double body_In[4][4];
         body_in = [[0.0] * 4 for _ in range(4)]
         # rotation matrix
@@ -128,22 +125,16 @@ class DSIExec:
         body_in[3][3] = pow(self.e0, 2) - pow(self.e1, 2) - pow(self.e2, 2) + pow(self.e3, 2)
 
         # euler angles pitch = teta head = psi roll = phi
-
-        # print( body_in[3][1])
-        # print(math.sqrt(1 - pow(body_in[3][1], 2)))
         self._fields["attitude/pitch-rad"] = -math.atan2(body_in[3][1], math.sqrt(1 - pow(body_in[3][1], 2)))
         self._fields["attitude/heading_true_rad"] = math.atan2(body_in[2][1], body_in[1][1])
         self._fields["attitude/roll-rad"] = math.atan2(body_in[3][2], body_in[3][3])
 
         # dynamic pressure
-        air_density = 1.225 / (
-                1. + 9.62 * pow(10., -5) * self.alt + 1.49 * pow(10., -8) * (pow(self.alt, 2)))
+        air_density = 1.225 / (1. + 9.62 * pow(10., -5) * self.alt + 1.49 * pow(10., -8) * (pow(self.alt, 2)))
         dyn_pres = 0.5 * air_density * pow(self.vel_forw, 2)
 
-        if self.vel_forw < 400:  # m/s
-            trust = (60000. / (1. + self.alt / 15000.) + 0. * self.vel_forw) * self._fields["fcs/throttle-cmd-norm"]
-        else:
-            trust = (60000. / (1. + self.alt / 15000.) + 0. * 300) * self._fields["fcs/throttle-cmd-norm"]
+        trust = 60000. / (1. + self.alt / 15000.)  * self._fields["fcs/throttle-cmd-norm"]
+
         a = -1. / 80
         b = 1 - 200 * a
         xcl = a * self.vel_forw * METER_TO_KNOTS + b
@@ -168,8 +159,7 @@ class DSIExec:
         side_slip = math.atan2(self.vel_rght, self.vel_forw)
         yaw_coef = -1.4 * side_slip
         pit_moment_coef = 0.005 - 0.05 * lift_coef - 0.28 * xcl * (
-                PITCH_CONST * self._fields[
-            "fcs/elevator-cmd-norm"] + 0.005 + self.vel_forw / 800. * 0.025) + lift_coef * (
+                PITCH_CONST * self._fields["fcs/elevator-cmd-norm"] + 0.005 + self.vel_forw / 800. * 0.025) + lift_coef * (
                                   SDOF_GRAV_CENTER - 0.49) - 10 * self.pitch_rate / self.vel_forw
         yaw_moment_coef = 0.26 * side_slip - 0.08 * ROLL_CONST * self._fields["fcs/aileron-cmd-norm"] + yaw_coef * (
                 SDOF_GRAV_CENTER - 0.49) - 2.8 * self.head_rate / self.vel_forw
@@ -241,7 +231,6 @@ class DSIExec:
         self.e3 *= ep
         # print(ep)
         # print(f" {self.e0}  {self.e1}  {self.e2} {self.e3}")
-
 
         self._fields["position/h_sl_ft"] = self.alt * 3.28084 - self.v_up_mps * self.dt
         self.lat += (self.v_north_mps * self.dt / (Earth_Radius_M + self._fields["position/h_sl_ft"])) * RAD_TO_DEG
