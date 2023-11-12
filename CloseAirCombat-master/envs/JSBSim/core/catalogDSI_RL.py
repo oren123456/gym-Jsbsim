@@ -43,12 +43,12 @@ class DSICatalog(Property, Enum):
                                      update=lambda sim: sim.set_property_value(
                                          DSICatalog.position_long_gc_deg,
                                          sim.get_property_value(DSICatalog.position_long_gc_rad)))
-    position_lat_gc_deg = Property("extra-data.position.lat-gc-deg", "deg", access="R",
+    position_lat_gc_deg = Property("position/lat-geod-deg", "deg", access="R",
                                    update=lambda sim: sim.set_property_value(
                                        DSICatalog.position_lat_gc_deg,
                                        sim.get_property_value(DSICatalog.position_lat_gc_rad) * 57.29))
     position_lat_gc_rad = Property("ac-rl.ac-data.pos.lat", "rad")
-    position_long_gc_deg = Property("extra-data.position.long-gc-deg", "geodesic longitude [deg]", -180, 180, access="R",
+    position_long_gc_deg = Property("position/long-gc-deg", "geodesic longitude [deg]", -180, 180, access="R",
                                     update=lambda sim: sim.set_property_value(
                                         DSICatalog.position_long_gc_deg,
                                         sim.get_property_value(DSICatalog.position_long_gc_rad) * 57.29))
@@ -309,7 +309,7 @@ class ExtraCatalog(Property, Enum):
     # state in other formats
 
     position_h_sl_m = Property(
-        "extra-data.position.h-sl-m", "altitude above mean sea level [m]", -500, 26000, access="R",
+        "position/h-sl-m", "altitude above mean sea level [m]", -500, 26000, access="R",
         update=lambda sim: sim.set_property_value(
             ExtraCatalog.position_h_sl_m,
             sim.get_property_value(DSICatalog.position_h_sl_ft) * 0.3048))
