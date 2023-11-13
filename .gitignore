@@ -16,3 +16,6 @@ CloseAirCombat-master/tests/
 jsbsim-gym-main - Copy/
 jsbsim-gym-main/wandb
 jsbsim/
+*.pt
+*/wandb
+CloseAirCombat-DSI-RL/scripts/results/SingleControl/1/heading/ppo/v1/wandb/

@@ -47,12 +47,12 @@ class DSICatalog(Property, Enum):
                                    update=lambda sim: sim.set_property_value(
                                        DSICatalog.position_lat_gc_deg,
                                        sim.get_property_value(DSICatalog.position_lat_gc_rad) * 57.29))
-    position_lat_gc_rad = Property("ac-rl.ac-data.pos.lat", "rad")
+    position_lat_gc_rad = Property("position/lat-gc-rad", "rad")
     position_long_gc_deg = Property("position/long-gc-deg", "geodesic longitude [deg]", -180, 180, access="R",
                                     update=lambda sim: sim.set_property_value(
                                         DSICatalog.position_long_gc_deg,
                                         sim.get_property_value(DSICatalog.position_long_gc_rad) * 57.29))
-    position_long_gc_rad = Property("ac-rl.ac-data.pos.lon", "rad")
+    position_long_gc_rad = Property("position/long-gc-rad", "rad")
     position_distance_from_start_mag_mt = Property("position/distance-from-start-mag-mt", "distance travelled from starting position [m]", access="R")
     position_distance_from_start_lat_mt = Property("position/distance-from-start-lat-mt", "mt", access="R")
     position_distance_from_start_lon_mt = Property("position/distance-from-start-lon-mt", "mt", access="R")
