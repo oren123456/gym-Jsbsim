@@ -110,7 +110,7 @@ class DSIExec:
         return self.sdof_calculate_data()
 
     def sdof_calculate_data(self):
-        # self._fields["fcs/elevator-cmd-norm"] = -0.1
+        # self._fields["fcs/elevator-cmd-norm"] = 0
         # self._fields["fcs/aileron-cmd-norm"] = 0
         # self._fields["fcs/throttle-cmd-norm"] = 1
         # print(f"sdof_calculate_data.")
@@ -164,9 +164,9 @@ class DSIExec:
         acc_down = dyn_pres * SDOF_WING_SURFACE * (-lift_coef - drag_coef * aoa) / SDOF_AC_WEIGHT + AC_GRAV_ACC * \
                    body_in[3][3] + self.pitch_rate * self.vel_forw
 
-        self.v_north_mps = body_in[1][1] * self.vel_forw + body_in[1][2] * self.vel_rght + body_in[1][3] * self.vel_down
-        self.v_west_mps = body_in[2][1] * self.vel_forw + body_in[2][2] * self.vel_rght + body_in[2][3] * self.vel_down
-        self.v_up_mps = body_in[3][1] * self.vel_forw + body_in[3][2] * self.vel_rght + body_in[3][3] * self.vel_down
+        self.v_north_mps = body_in[1][1] * self.vel_forw +body_in[1][2] * self.vel_rght + body_in[1][3] * self.vel_down
+        self.v_west_mps = -(body_in[2][1] * self.vel_forw + body_in[2][2] * self.vel_rght + body_in[2][3] * self.vel_down)
+        self.v_up_mps = -(body_in[3][1] * self.vel_forw + body_in[3][2] * self.vel_rght + body_in[3][3] * self.vel_down)
 
         # integrations
         self.vel_forw += (1.5 * acc_forw - 0.5 * self.acc_forw_prv) * self.dt
@@ -216,9 +216,9 @@ class DSIExec:
         self.e2 *= ep
         self.e3 *= ep
 
-        self.alt_m -= self.v_up_mps * self.dt
-        self.lat += (self.v_north_mps * self.dt / (Earth_Radius_M + self.alt_m)) * RAD_TO_DEG
-        self.long -= (self.v_west_mps * self.dt / (Earth_Radius_M + self.alt_m) * math.cos(self.lat)) * RAD_TO_DEG
+        self.alt_m += self.v_up_mps * self.dt
+        self.lat += self.v_north_mps * self.dt / (Earth_Radius_M + self.alt_m) * RAD_TO_DEG
+        self.long -= self.v_west_mps * self.dt / (Earth_Radius_M + self.alt_m) * math.cos(math.radians(self.lat)) * RAD_TO_DEG
 
         self._fields["position/lat-gc-rad"] = self.lat * DEG_TO_RAD
         self._fields["position/long-gc-rad"] = self.long * DEG_TO_RAD

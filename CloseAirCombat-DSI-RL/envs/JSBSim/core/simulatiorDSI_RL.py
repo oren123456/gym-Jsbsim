@@ -189,8 +189,8 @@ class AircraftSimulator(BaseSimulator):
 
     def clear_defalut_condition(self):
         default_condition = {
-            Catalog.ic_long_gc_deg: 120.0,  # geodesic longitude [deg]
-            Catalog.ic_lat_geod_deg: 60.0,  # geodesic latitude  [deg]
+            Catalog.ic_long_gc_deg: 34.859,  # geodesic longitude [deg]
+            Catalog.ic_lat_geod_deg: 32.013,  # geodesic latitude  [deg]
             Catalog.ic_h_sl_ft: 20000,      # altitude above mean sea level [ft]
             Catalog.ic_psi_true_deg: 0.0,   # initial (true) heading [deg] (0, 360)
             Catalog.ic_u_fps: 800.0,        # body frame x-axis velocity [ft/s]  (-2200, 2200)
