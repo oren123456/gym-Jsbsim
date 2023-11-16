@@ -9,7 +9,6 @@ from .visualization.rendering import Viewer, load_mesh, load_shader, RenderObjec
 from .visualization.quaternion import Quaternion
 from numpy.linalg import norm
 from gymnasium.utils import seeding
-import os
 
 import pymap3d
 
@@ -66,9 +65,6 @@ STATE_HIGH = np.array([
 RADIUS = 6.3781e6
 
 
-def get_root_dir():
-    return os.path.join(os.path.split(os.path.realpath(__file__))[0], '..')
-
 def log_info(self, infos, total_num_steps):
     if self.use_wandb:
         wandb.log({k: v for k, v in infos.items()}, step=total_num_steps)
@@ -76,7 +72,6 @@ def log_info(self, infos, total_num_steps):
         #     wandb.log({k: v}, step=total_num_steps)
     else:
         pass
-
 
 class JSBSimEnv(gym.Env):
     """
@@ -120,7 +115,7 @@ class JSBSimEnv(gym.Env):
         self.acceleration_limit_y = 10.0
         self.acceleration_limit_z = 10.0
         self.altitude_limit = 2500
-        self.max_steps = 10000
+        self.max_steps = 2000
         self.max_heading_increment = 180  # degree
         self.max_altitude_increment = 7000  # feet
         self.max_velocities_u_increment = 100  # meter
@@ -133,12 +128,20 @@ class JSBSimEnv(gym.Env):
         self.metadata["render_modes"] = ["rgb_array"]
         self.render_mode = "rgb_array"
 
-        self.down_sample = 1
-
-        self.simulation = jsbsim.FGFDMExec('.', None)
+        # Initialize JSBSim
+        self.simulation = jsbsim.FGFDMExec(root, None)
         self.simulation.set_debug_level(0)
+        #  JSBSIM default dT is 0.0083 ( 1/120 ) per step
         self.simulation.set_dt(1 / 60)
-        a = self.simulation.load_model('f16')
+
+        self.state = np.zeros(10)
+
+        # Load F-16 model and set initial conditions
+        self.simulation.load_model('f16')
+        self.reset()
+        self.simulation.run_ic()
+
+        self.down_sample = 1
 
         # self.goal = np.zeros(3)
         # self.viewer = None
@@ -154,7 +157,7 @@ class JSBSimEnv(gym.Env):
 
         self.np_random, seed = seeding.np_random(None)
         self.increment_size = [0.2, 0.4, 0.6, 0.8, 1.0] + [1.0] * 10
-        self.check_interval = 20
+        self.check_interval = 30
 
     def get_extreme_state(self):
         extreme_velocity = self.simulation.get_property_value("velocities/eci-velocity-mag-fps") >= 1e10
@@ -175,8 +178,8 @@ class JSBSimEnv(gym.Env):
                     ]
                 ) > 1e1
         )  # acceleration larger than 10G
-        if extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration:
-            print(f'{self.simulation.get_property_value("simulation/sim-time-sec")}: extreme_state')
+        # if extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration:
+        #     print("Continuing work on ")
         return extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration
 
     def _judge_overload(self, ):
@@ -187,7 +190,6 @@ class JSBSimEnv(gym.Env):
                     or math.fabs(self.simulation.get_property_value("accelerations/n-pilot-y-norm")) > self.acceleration_limit_y \
                     or math.fabs(self.simulation.get_property_value("accelerations/n-pilot-z-norm") + 1) > self.acceleration_limit_z:
                 flag_overload = True
-                print(f'{simulation_sim_time_sec}: judge overload')
         return flag_overload
 
     def get_termination(self, ):
@@ -199,7 +201,6 @@ class JSBSimEnv(gym.Env):
         if simulation_sim_time_sec >= self.heading_check_time:
             self.heading_check_time += self.check_interval
             if math.fabs(self.state[1]) > 10:  # delta_heading
-                print(f'{simulation_sim_time_sec}: Did ot reach heading')
                 done = True
             # if current target heading is reached, random generate a new target heading
             else:
@@ -208,12 +209,9 @@ class JSBSimEnv(gym.Env):
                 self.target_altitude_ft += self.np_random.uniform(-delta, delta) * self.max_altitude_increment
                 self.target_velocities_u_mps += self.np_random.uniform(-delta, delta) * self.max_velocities_u_increment
                 self.heading_turn_counts += 1
-                print(f'{simulation_sim_time_sec}: target_heading:{self.target_heading_deg} '
-                      f'heading_turn_counts:{self.heading_turn_counts} ')
-                # f'target_altitude_ft:{ self.target_altitude_ft} target_velocities_u_mps:{self.target_velocities_u_mps}')
+                # self.log(f'current_step:{cur_step} target_heading:{new_heading} '
+                #          f'target_altitude_ft:{new_altitude} target_velocities_u_mps:{new_velocities_u}')
 
-        if self.current_step >= self.max_steps:
-            print(f'{simulation_sim_time_sec}: max_steps')
         return self.get_extreme_state() or self.current_step >= self.max_steps or \
             (self.simulation.get_property_value("position/h-sl-ft") * 0.3048) <= self.altitude_limit or \
             self._judge_overload() or done
@@ -301,9 +299,6 @@ class JSBSimEnv(gym.Env):
         # super().reset() # seed=seed
         obs = super().reset()
 
-        # Initialize JSBSim
-        self.state = np.zeros(10)
-
         # Get state from JSBSim and save to self.state
         init_heading = self.np_random.uniform(0., 180.)
         init_altitude = self.np_random.uniform(14000., 30000.)
@@ -346,6 +341,8 @@ class JSBSimEnv(gym.Env):
               in implementations to use the functionality of this method.
         :param mode: str, the mode to render with
         """
+
+
         if mode == "txt":
             if not self._create_records:
                 with open(filepath, mode='w', encoding='utf-8-sig') as f:
@@ -354,18 +351,17 @@ class JSBSimEnv(gym.Env):
                     f.write("0,ReferenceTime=2020-04-01T00:00:00Z\n")
                 self._create_records = True
             with open(filepath, mode='a', encoding='utf-8-sig') as f:
-                # timestamp = self.current_step * self.time_interval
-                timestamp = self.simulation.get_sim_time()
+                timestamp = self.current_step * self.time_interval
                 f.write(f"#{timestamp:.2f}\n")
 
                 lon = self.simulation.get_property_value("position/long-gc-deg")
                 lat = self.simulation.get_property_value("position/lat-geod-deg")
                 alt = self.simulation.get_property_value("position/h-sl-ft") * 0.3048
-                roll = self.simulation.get_property_value("attitude/roll-rad") * 180 / np.pi
+                roll  =  self.simulation.get_property_value("attitude/roll-rad") * 180 / np.pi
                 pitch = self.simulation.get_property_value("attitude/pitch-rad") * 180 / np.pi
                 yaw = self.simulation.get_property_value("attitude/heading-true-rad") * 180 / np.pi
                 log_msg = f"{1},T={lon}|{lat}|{alt}|{roll}|{pitch}|{yaw},"
-                log_msg += f"Name=F16,"
+                log_msg += f"Name=AAA,"
                 log_msg += f"Color=Blue"
                 if log_msg is not None:
                     f.write(log_msg + "\n")
@@ -373,10 +369,10 @@ class JSBSimEnv(gym.Env):
         else:
             raise NotImplementedError
 
-    # def close(self):
-    # if self.viewer is not None:
-    #     self.viewer.close()
-    #     self.viewer = None
+    def close(self):
+        if self.viewer is not None:
+            self.viewer.close()
+            self.viewer = None
 
 
 class PositionReward(gym.Wrapper):
@@ -419,3 +415,138 @@ gym.register(
     entry_point=wrap_jsbsim,
     max_episode_steps=1200
 )
+# return np.hstack([self.state, self.goal], dtype=np.float32)
+
+# if done:
+# self.log(f'agent[{agent_id}] unreached heading. Total Steps={env.current_step}')
+# info['heading_turn_counts'] = env.heading_turn_counts
+
+# End up the simulation if the aircraft is on an extreme state.
+# if done:
+# env.agents[agent_id].crash()
+# self.log(f'{agent_id} is on an extreme state! Total Steps={env.current_step}')
+
+#   End up the simulation if acceleration are too high.
+# if done:
+#     env.agents[agent_id].crash()
+#     self.log(f'{agent_id} acceleration is too high! Total Steps={env.current_step}')
+
+# End up the simulation if altitude are too low.
+
+# if done:
+#     env.agents[agent_id].crash()
+#     self.log(f'{agent_id} altitude is too low. Total Steps={env.current_step}')
+
+# Terminate if max_step steps have passed
+# if done:
+#     self.log(f"{agent_id} step limits! Total Steps={env.current_step}")
+
+# success = False
+# if self.simulation.get_property_value("position/h-sl-ft") * 0.3048 <= self.altitude_limit:
+#     print("aaaa")
+# if   self.current_step >= self.max_steps:
+#     print("aaaa")
+# self._geodetic = [self.simulation.get_property_value("position/long-gc-deg"),
+#                   self.simulation.get_property_value("position/lat-geod-deg"),
+#                   self.simulation.get_property_value("position/h-sl-ft") * 0.3048]
+
+# def render(self):
+#     scale = 1e-3
+#
+#     if self.viewer is None:
+#         self.viewer = Viewer(1280, 720)
+#
+#         f16_mesh = load_mesh(self.viewer.ctx, self.viewer.prog, "f16.obj")
+#         self.f16 = RenderObject(f16_mesh)
+#         self.f16.transform.scale = 1 / 30
+#         self.f16.color = 0, 0, .4
+#
+#         goal_mesh = load_mesh(self.viewer.ctx, self.viewer.prog, "cylinder.obj")
+#         self.cylinder = RenderObject(goal_mesh)
+#         self.cylinder.transform.scale = scale * 100
+#         self.cylinder.color = 0, .4, 0
+#
+#         self.viewer.objects.append(self.f16)
+#         self.viewer.objects.append(self.cylinder)
+#         self.viewer.objects.append(Grid(self.viewer.ctx, self.viewer.unlit, 21, 1.))
+#
+#     # Rough conversion from lat/long to meters
+#     x, y, z = self.state[:3] * scale
+#
+#     self.f16.transform.z = x
+#     self.f16.transform.x = -y
+#     self.f16.transform.y = z
+#
+#     rot = Quaternion.from_euler(*self.state[9:])
+#     rot = Quaternion(rot.w, -rot.y, -rot.z, rot.x)
+#     self.f16.transform.rotation = rot
+#
+#     # self.viewer.set_view(-y , z + 1, x - 3, Quaternion.from_euler(np.pi/12, 0, 0, mode=1))
+#
+#     x, y, z = self.goal * scale
+#
+#     self.cylinder.transform.z = x
+#     self.cylinder.transform.x = -y
+#     self.cylinder.transform.y = z
+#
+#     r = self.f16.transform.position - self.cylinder.transform.position
+#     rhat = r / np.linalg.norm(r)
+#     x, y, z = r
+#     yaw = np.arctan2(-x, -z)
+#     pitch = np.arctan2(-y, np.sqrt(x ** 2 + z ** 2))
+#
+#     self.viewer.set_view(*(r + self.cylinder.transform.position + rhat + np.array([0, .33, 0])),
+#                          Quaternion.from_euler(-pitch, yaw, 0, mode=1))
+#
+#     # print(self.f16.transform.position)
+#
+#     # rot = Quaternion.from_euler(-self.state[10], -self.state[11], self.state[9], mode=1)
+#
+#     self.viewer.render()
+#
+#     render_modes = self.metadata.get("render_modes")
+#     if render_modes is not None:
+#         if 'rgb_array' in render_modes:
+#             return self.viewer.get_frame()
+#
+# def tacview_log(self,  filepath='./JSBSimRecording.txt.acmi'):
+#     """Renders the environment.
+#     Note:
+#         Make sure that your class's metadata 'render.modes' key includes
+#           the list of supported modes. It's recommended to call super()
+#           in implementations to use the functionality of this method.
+#     :param mode: str, the mode to render with
+#     """
+#     if not self._create_records:
+#         with open(filepath, mode='w', encoding='utf-8-sig') as f:
+#             f.write("FileType=text/acmi/tacview\n")
+#             f.write("FileVersion=2.1\n")
+#             f.write("0,ReferenceTime=2020-04-01T00:00:00Z\n")
+#         self._create_records = True
+#     with open(filepath, mode='a', encoding='utf-8-sig') as f:
+#         #timestamp = self.current_step * self.time_interval
+#         timestamp = self.simulation.get_sim_time()
+#         f.write(f"#{timestamp:.2f}\n")
+#         log_msg = sim.log()
+#             if log_msg is not None:
+#                 f.write(log_msg + "\n")
+#         for sim in self._tempsims.values():
+#             log_msg = sim.log()
+#             if log_msg is not None:
+#                 f.write(log_msg + "\n")
+# # TODO: real time rendering [Use FlightGear, etc.]
+
+
+# Short example script to create and run the environment with
+# constant action for 1 simulation second.
+# if __name__ == "__main__":
+#     from time import sleep
+#
+#     env = JSBSimEnv()
+#     env.reset()
+#     env.render()
+#     for _ in range(300):
+#         env.step(np.array([0.05, -0.2, 0, .5]))
+#         env.render()
+#         sleep(1 / 30)
+#     env.close()
