@@ -1,0 +1,24 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="TRAIN HEADING DSI" type="PythonConfigurationType" factoryName="Python">
+    <module name="CloseAirCombat-DSI-RL" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
+    <option name="SDK_HOME" value="C:\Users\User\AppData\Local\Programs\Python\Python39\python.exe" />
+    <option name="SDK_NAME" value="Python 3.9" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/scripts/train" />
+    <option name="IS_MODULE_SDK" value="false" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/scripts/train/train_dsisim.py" />
+    <option name="PARAMETERS" value="--env-name &quot;SingleControl&quot; --algorithm-name &quot;ppo&quot; --scenario-name &quot;1/heading&quot; --experiment-name &quot;v1&quot; \     --seed 5 --n-training-threads 1 --n-rollout-threads 32 --cuda \     --log-interval 1 --save-interval 1 \     --num-mini-batch 5 --buffer-size 3000 --num-env-steps 1e8 \     --lr 3e-4 --gamma 0.99 --ppo-epoch 4 --clip-params 0.2 --max-grad-norm 2 --entropy-coef 1e-3 \     --hidden-size &quot;128 128&quot; --act-hidden-size &quot;128 128&quot; --recurrent-hidden-size 128 --recurrent-hidden-layers 1 --data-chunk-length 8 --use-wandb --model-dir ../results/SingleControl/1/heading/ppo/v1/run1" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="false" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>
