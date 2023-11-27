@@ -25,6 +25,7 @@ class BaseEnv(gym.Env):
         self.config = parse_config(config_name)
         self.max_steps = getattr(self.config, 'max_steps', 100)  # type: int
         self.sim_freq = getattr(self.config, 'sim_freq', 60)  # type: int
+        self.agent_interaction_steps = getattr(self.config, 'agent_interaction_steps', 12)  # type: int
         self.center_lon, self.center_lat, self.center_alt = \
             getattr(self.config, 'battle_field_center', (120.0, 60.0, 0.0))
         self._create_records = False
@@ -129,11 +130,11 @@ class BaseEnv(gym.Env):
             a_action = self.task.normalize_action(self, agent_id, action[agent_id])
             self.agents[agent_id].set_property_values(self.task.action_var, a_action)
         # run simulation
-        # for _ in range(self.agent_interaction_steps):
-        for sim in self._jsbsims.values():
-            sim.run()
-        for sim in self._tempsims.values():
-            sim.run()
+        for _ in range(self.agent_interaction_steps):
+            for sim in self._jsbsims.values():
+                sim.run()
+            for sim in self._tempsims.values():
+                sim.run()
         # print(f"step {self.current_step}")
         self.task.step(self)
 

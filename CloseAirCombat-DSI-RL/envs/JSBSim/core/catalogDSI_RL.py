@@ -445,8 +445,8 @@ class ExtraCatalog(Property, Enum):
         # if extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration:
         # print(f"accelerations_n_pilot_x_norm: {abs(sim.get_property_value(DSICatalog.accelerations_a_pilot_x_ft_sec2))}, accelerations_n_pilot_y_norm:{abs(sim.get_property_value(DSICatalog.accelerations_a_pilot_y_ft_sec2))}, "
         # f"accelerations_n_pilot_z_norm:{abs(sim.get_property_value(DSICatalog.accelerations_a_pilot_z_ft_sec2))}, ")
-        if extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration:
-            print("aaaaa")
+        # if extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration:
+        #     print("aaaaa")
         sim.set_property_value(
             ExtraCatalog.detect_extreme_state,
             extreme_altitude or extreme_rotation or extreme_velocity or extreme_acceleration,

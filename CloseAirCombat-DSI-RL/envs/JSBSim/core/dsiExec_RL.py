@@ -17,8 +17,10 @@ FEET_TO_METER = 1. / 3.280839
 METER_TO_FEET = 3.280839
 Earth_Radius = 2.092646982E7  # earth radius at the equator [feet]
 Earth_Radius_M = Earth_Radius * FEET_TO_METER
-PITCH_CONST = 0.10
-ROLL_CONST = 0.06
+
+
+# PITCH_CONST = 0.10
+# ROLL_CONST = 0.06
 
 
 class DSIExec:
@@ -110,8 +112,8 @@ class DSIExec:
         return self.sdof_calculate_data()
 
     def sdof_calculate_data(self):
-        # self._fields["fcs/elevator-cmd-norm"] = 0
-        # self._fields["fcs/aileron-cmd-norm"] = 0
+        elevator = self._fields["fcs/elevator-cmd-norm"] * .1
+        aileron = self._fields["fcs/aileron-cmd-norm"] * .06
         # self._fields["fcs/throttle-cmd-norm"] = 1
         # print(f"sdof_calculate_data.")
         # double body_In[4][4];
@@ -127,60 +129,58 @@ class DSIExec:
         body_in[3][2] = 2. * (self.e2 * self.e3 + self.e0 * self.e1)
         body_in[3][3] = pow(self.e0, 2) - pow(self.e1, 2) - pow(self.e2, 2) + pow(self.e3, 2)
 
-        # euler angles pitch = teta head = psi roll = phi
-        self._fields["attitude/pitch-rad"] = -math.atan2(body_in[3][1], math.sqrt(1 - pow(body_in[3][1], 2)))
-        self._fields["attitude/heading_true_rad"] = math.atan2(body_in[2][1], body_in[1][1])
-        self._fields["attitude/roll-rad"] = math.atan2(body_in[3][2], body_in[3][3])
-
         a = -1. / 80
         b = 1 - 200 * a
         xcl = np.clip(a * self.vel_forw * METER_TO_KNOTS + b, 1, 2.5)
         # aerodynamic equations
         aoa = math.atan2(self.vel_down, self.vel_forw)
+        c = 3.5
         if self.vel_forw < 250:  # m/s
-            lift_coef = 2.5 * aoa * xcl + PITCH_CONST * self._fields["fcs/elevator-cmd-norm"]
-        else:
-            lift_coef = 3.5 * aoa * xcl + PITCH_CONST * self._fields["fcs/elevator-cmd-norm"]
+            c = 2.5
+        lift_coef = c * aoa * xcl + elevator
 
-        cdsb = np.clip (FACS_DRAG_FACTOR * (1 - aoa / 0.3), 0, FACS_DRAG_FACTOR)
+        # cdsb = np.clip (FACS_DRAG_FACTOR * (1 - aoa / 0.3), 0, FACS_DRAG_FACTOR)
 
-        drag_coef = cdsb + (0.025 + 0.6 * (pow(lift_coef, 2))) * 1.25
+        drag_coef = (0.025 + 0.6 * (pow(lift_coef, 2))) * 1.25
         side_slip = math.atan2(self.vel_rght, self.vel_forw)
         yaw_coef = -1.4 * side_slip
-        pit_moment_coef = 0.005 - 0.05 * lift_coef - 0.28 * xcl * (PITCH_CONST * self._fields[
-            "fcs/elevator-cmd-norm"] + 0.005 + self.vel_forw / 800. * 0.025) + lift_coef * (
+        pit_moment_coef = 0.005 - 0.05 * lift_coef - 0.28 * xcl * (elevator + 0.005 + self.vel_forw / 800. * 0.025) + lift_coef * (
                                   SDOF_GRAV_CENTER - 0.49) - 10 * self.pitch_rate / self.vel_forw
-        yaw_moment_coef = 0.26 * side_slip - 0.08 * ROLL_CONST * self._fields["fcs/aileron-cmd-norm"] + yaw_coef * (
+        yaw_moment_coef = 0.26 * side_slip - 0.08 * aileron + yaw_coef * (
                 SDOF_GRAV_CENTER - 0.49) - 2.8 * self.head_rate / self.vel_forw
+        rol_moment_coef = -0.2 * aileron - self.roll_rate / self.vel_forw
 
         # dynamic pressure
         air_density = 1.225 / (1. + 9.62 * pow(10., -5) * self.alt_m + 1.49 * pow(10., -8) * (pow(self.alt_m, 2)))
         dyn_pres = 0.5 * air_density * pow(self.vel_forw, 2)
         trust = (60000. / (1. + self.alt_m / 15000.)) * self._fields["fcs/throttle-cmd-norm"]
 
-        acc_forw = (dyn_pres * SDOF_WING_SURFACE * ( lift_coef * aoa - drag_coef) + trust) / SDOF_AC_WEIGHT + AC_GRAV_ACC * body_in[3][1]
+        acc_forw = (dyn_pres * SDOF_WING_SURFACE * (lift_coef * aoa - drag_coef) + trust) / SDOF_AC_WEIGHT + AC_GRAV_ACC * body_in[3][1]
         acc_rght = dyn_pres * SDOF_WING_SURFACE * (yaw_coef - drag_coef * side_slip) / SDOF_AC_WEIGHT + AC_GRAV_ACC * \
                    body_in[3][2] - self.head_rate * self.vel_forw
         acc_down = dyn_pres * SDOF_WING_SURFACE * (-lift_coef - drag_coef * aoa) / SDOF_AC_WEIGHT + AC_GRAV_ACC * \
                    body_in[3][3] + self.pitch_rate * self.vel_forw
 
-        self.v_north_mps = body_in[1][1] * self.vel_forw +body_in[1][2] * self.vel_rght + body_in[1][3] * self.vel_down
+        roll_acc = dyn_pres * SDOF_WING_CHORD * SDOF_WING_SURFACE * rol_moment_coef / SDOF_INERTIAL_MOM_X
+        pit_acc = dyn_pres * SDOF_WING_CHORD * SDOF_WING_SURFACE * pit_moment_coef / SDOF_INERTIAL_MOM_Y
+        head_acc = dyn_pres * SDOF_WING_CHORD * SDOF_WING_SURFACE * yaw_moment_coef / SDOF_INERTIAL_MOM_Z + (
+                SDOF_INERTIAL_MOM_X - SDOF_INERTIAL_MOM_Y) * self.roll_rate * self.pitch_rate / SDOF_INERTIAL_MOM_Z
+
+        # derivatives of equations
+        e0dot = 0.5 * (-self.e1 * self.roll_rate - self.e2 * self.pitch_rate - self.e3 * self.head_rate)
+        e1dot = 0.5 * (self.e0 * self.roll_rate - self.e3 * self.pitch_rate + self.e2 * self.head_rate)
+        e2dot = 0.5 * (self.e3 * self.roll_rate + self.e0 * self.pitch_rate - self.e1 * self.head_rate)
+        e3dot = 0.5 * (-self.e2 * self.roll_rate + self.e1 * self.pitch_rate + self.e0 * self.head_rate)
+
+        self.v_north_mps = body_in[1][1] * self.vel_forw + body_in[1][2] * self.vel_rght + body_in[1][3] * self.vel_down
         self.v_west_mps = -(body_in[2][1] * self.vel_forw + body_in[2][2] * self.vel_rght + body_in[2][3] * self.vel_down)
         self.v_up_mps = -(body_in[3][1] * self.vel_forw + body_in[3][2] * self.vel_rght + body_in[3][3] * self.vel_down)
 
         # integrations
         self.vel_forw += (1.5 * acc_forw - 0.5 * self.acc_forw_prv) * self.dt
-        self.acc_forw_prv = acc_forw
         if self.vel_forw < 10.0:
             self.vel_forw = 10.0
-
-        # if roll manuoevering is required to be changed then roll dumper roll_rate/vel_forw should be multiplied by a
-        # correspondent coef.
-        rol_moment_coef = -0.2 * ROLL_CONST * self._fields["fcs/aileron-cmd-norm"] - self.roll_rate / self.vel_forw
-        roll_acc = dyn_pres * SDOF_WING_CHORD * SDOF_WING_SURFACE * rol_moment_coef / SDOF_INERTIAL_MOM_X
-        pit_acc = dyn_pres * SDOF_WING_CHORD * SDOF_WING_SURFACE * pit_moment_coef / SDOF_INERTIAL_MOM_Y
-        head_acc = dyn_pres * SDOF_WING_CHORD * SDOF_WING_SURFACE * yaw_moment_coef / SDOF_INERTIAL_MOM_Z + (
-                SDOF_INERTIAL_MOM_X - SDOF_INERTIAL_MOM_Y) * self.roll_rate * self.pitch_rate / SDOF_INERTIAL_MOM_Z
+        self.acc_forw_prv = acc_forw
 
         self.vel_rght += (1.5 * acc_rght - 0.5 * self.acc_rght_prv) * self.dt
         self.acc_rght_prv = acc_rght
@@ -192,12 +192,6 @@ class DSIExec:
         self.pit_acc_prv = pit_acc
         self.head_rate += (1.5 * head_acc - 0.5 * self.head_acc_prv) * self.dt
         self.head_acc_prv = head_acc
-
-        # derivatives of equations
-        e0dot = 0.5 * (-self.e1 * self.roll_rate - self.e2 * self.pitch_rate - self.e3 * self.head_rate)
-        e1dot = 0.5 * (self.e0 * self.roll_rate - self.e3 * self.pitch_rate + self.e2 * self.head_rate)
-        e2dot = 0.5 * (self.e3 * self.roll_rate + self.e0 * self.pitch_rate - self.e1 * self.head_rate)
-        e3dot = 0.5 * (-self.e2 * self.roll_rate + self.e1 * self.pitch_rate + self.e0 * self.head_rate)
 
         # components of rotation matrix(EULER ANGLES)
         self.e0 += (1.5 * e0dot - 0.5 * self.e0dotp) * self.dt
@@ -217,8 +211,13 @@ class DSIExec:
         self.e3 *= ep
 
         self.alt_m += self.v_up_mps * self.dt
-        self.lat += self.v_north_mps * self.dt / (Earth_Radius_M + self.alt_m) * RAD_TO_DEG
-        self.long -= self.v_west_mps * self.dt / (Earth_Radius_M + self.alt_m) * math.cos(math.radians(self.lat)) * RAD_TO_DEG
+        self.lat += (self.v_north_mps * self.dt / (Earth_Radius_M + self.alt_m)) * RAD_TO_DEG
+        self.long -= (self.v_west_mps * self.dt / (Earth_Radius_M + self.alt_m) * math.cos(math.radians(self.lat))) * RAD_TO_DEG
+
+        # euler angles pitch = teta head = psi roll = phi
+        self._fields["attitude/pitch-rad"] = -math.atan2(body_in[3][1], math.sqrt(1 - pow(body_in[3][1], 2)))
+        self._fields["attitude/heading_true_rad"] = math.atan2(body_in[2][1], body_in[1][1])
+        self._fields["attitude/roll-rad"] = math.atan2(body_in[3][2], body_in[3][3])
 
         self._fields["position/lat-gc-rad"] = self.lat * DEG_TO_RAD
         self._fields["position/long-gc-rad"] = self.long * DEG_TO_RAD
@@ -234,9 +233,9 @@ class DSIExec:
         self._fields["velocities/r-rad_sec"] = self.head_rate * DEG_TO_RAD
 
         self._fields["simulation/sim-time-sec"] += self.dt
-        self._fields["accelerations/a-pilot-x-ft_sec2"] = acc_forw/AC_GRAV_ACC * METER_TO_FEET
-        self._fields["accelerations/a-pilot-y-ft_sec2"] = acc_rght/AC_GRAV_ACC * METER_TO_FEET
-        self._fields["accelerations/a-pilot-z-ft_sec2"] = acc_down/AC_GRAV_ACC * METER_TO_FEET
+        self._fields["accelerations/a-pilot-x-ft_sec2"] = acc_forw / AC_GRAV_ACC * METER_TO_FEET
+        self._fields["accelerations/a-pilot-y-ft_sec2"] = acc_rght / AC_GRAV_ACC * METER_TO_FEET
+        self._fields["accelerations/a-pilot-z-ft_sec2"] = acc_down / AC_GRAV_ACC * METER_TO_FEET
 
         self._fields["velocities/u-fps"] = self.vel_forw * METER_TO_FEET
         self._fields["velocities/v-fps"] = self.vel_rght * METER_TO_FEET
