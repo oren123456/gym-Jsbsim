@@ -41,7 +41,7 @@ class UnreachHeading(BaseTerminationCondition):
                 done = True
             # if current target heading is reached, random generate a new target heading
             else:
-                delta = self.increment_size[env.heading_turn_counts]
+                delta = self.increment_size[min(env.heading_turn_counts, len(self.increment_size)-1)]
                 delta_heading = env.np_random.uniform(-delta, delta) * self.max_heading_increment
                 delta_altitude = env.np_random.uniform(-delta, delta) * self.max_altitude_increment
                 delta_velocities_u = env.np_random.uniform(-delta, delta) * self.max_velocities_u_increment
