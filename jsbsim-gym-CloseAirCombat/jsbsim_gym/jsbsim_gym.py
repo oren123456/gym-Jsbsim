@@ -133,7 +133,7 @@ class JSBSimEnv(gym.Env):
         self.metadata["render_modes"] = ["rgb_array"]
         self.render_mode = "rgb_array"
 
-        self.down_sample = 1
+        self.down_sample = 12
 
         self.simulation = jsbsim.FGFDMExec('.', None)
         self.simulation.set_debug_level(0)
@@ -199,17 +199,16 @@ class JSBSimEnv(gym.Env):
         if simulation_sim_time_sec >= self.heading_check_time:
             self.heading_check_time += self.check_interval
             if math.fabs(self.state[1]) > 10:  # delta_heading
-                print(f'{simulation_sim_time_sec}: Did ot reach heading')
+                # print(f'{simulation_sim_time_sec}: Did ot reach heading')
                 done = True
             # if current target heading is reached, random generate a new target heading
             else:
                 delta = self.increment_size[self.heading_turn_counts]
-                self.target_heading_deg += (self.np_random.uniform(-delta, delta) * self.max_heading_increment + 360) % 360
+                self.target_heading_deg = (self.target_heading_deg + self.np_random.uniform(-delta, delta) * self.max_heading_increment + 360) % 360
                 self.target_altitude_ft += self.np_random.uniform(-delta, delta) * self.max_altitude_increment
                 self.target_velocities_u_mps += self.np_random.uniform(-delta, delta) * self.max_velocities_u_increment
                 self.heading_turn_counts += 1
-                print(f'{simulation_sim_time_sec}: target_heading:{self.target_heading_deg} '
-                      f'heading_turn_counts:{self.heading_turn_counts} ')
+                # print(f'{simulation_sim_time_sec}: target_heading:{self.target_heading_deg} heading_turn_counts:{self.heading_turn_counts} ')
                 # f'target_altitude_ft:{ self.target_altitude_ft} target_velocities_u_mps:{self.target_velocities_u_mps}')
 
         if self.current_step >= self.max_steps:
@@ -221,6 +220,7 @@ class JSBSimEnv(gym.Env):
     def get_reward(self, ):
         # Heading reward
         heading_r = math.exp(-((self.state[1] / 5.0) ** 2))  # heading_error_scale degrees
+        # print(self.state[1])
         alt_r = np.max(max(math.exp(-((self.state[0] / 15.24) ** 2)), 1e-200))  # alt_error_scale m
         roll_r = math.exp(-((self.state[4] / 0.35) ** 2))  # roll_error_scale radians ~= 20 degrees
         speed_r = math.exp(-((self.state[2] / 24) ** 2))  # speed_error_scale mps (~10%)
@@ -235,7 +235,6 @@ class JSBSimEnv(gym.Env):
         ph = 0.
         if ego_z <= self.danger_altitude:
             ph = np.clip(ego_z / self.danger_altitude, 0., 1.) - 1. - 1.
-
         return reward + pv + ph
 
     def step(self, action):
@@ -243,7 +242,7 @@ class JSBSimEnv(gym.Env):
 
         timestamp = self.simulation.get_sim_time()
         roll_cmd, pitch_cmd, yaw_cmd, throttle = action
-
+        # print(action)
         # Pass control inputs to JSBSim
         self.simulation.set_property_value("fcs/aileron-cmd-norm", roll_cmd)  # Sets the aileron command
         self.simulation.set_property_value("fcs/elevator-cmd-norm", pitch_cmd)  # Sets the elevator command

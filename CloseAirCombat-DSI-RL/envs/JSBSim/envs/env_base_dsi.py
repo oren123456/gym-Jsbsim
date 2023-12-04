@@ -208,7 +208,7 @@ class BaseEnv(gym.Env):
                     f.write("0,ReferenceTime=2020-04-01T00:00:00Z\n")
                 self._create_records = True
             with open(filepath, mode='a', encoding='utf-8-sig') as f:
-                timestamp = self.current_step * self.time_interval
+                timestamp = self.current_step * self.time_interval* self.agent_interaction_steps
                 f.write(f"#{timestamp:.2f}\n")
                 for sim in self._jsbsims.values():
                     log_msg = sim.log()

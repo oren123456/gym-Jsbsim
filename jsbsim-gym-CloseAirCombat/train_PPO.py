@@ -19,6 +19,10 @@ from stable_baselines3.common.logger import Logger, KVWriter, HumanOutputFormat
 from typing import Any, Dict, Optional, Tuple
 from datetime import datetime
 from config import get_config
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
+import multiprocessing
+import gymnasium as gym
 
 # from envs.JSBSim.envs import SingleCombatEnv, SingleControlEnv, MultipleCombatEnv
 from envs.env_wrappers import DummyVecEnv, ShareDummyVecEnv
@@ -81,6 +85,7 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         if self.my_info_buffer is None:
             self.my_info_buffer = deque(maxlen=self._stats_window_size)
 
+
     # def _init_callback(self) -> None:
     #     # Create folder if needed
     #     if self.save_path is not None:
@@ -130,45 +135,66 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
         :param progress_remaining:
         :return: current learning rate
         """
+        print(f'learning rate:{progress_remaining * initial_value}')
         return progress_remaining * initial_value
 
     return func
 
 
-stats_window_size = 100
-# Everything in the config dict is saved to wandb
-config = {
-    "total_timesteps": 2500000,
-    "env_name": "JSBSim-v0",
-}
+if __name__ == '__main__':
+    multiprocessing.freeze_support()
 
-log_dir = f"logs/" + datetime.now().strftime("%H_%M_%S")
-os.makedirs(log_dir, exist_ok=True)
-#
-env = PositionReward(JSBSimEnv(), 1e-2)
-env = Monitor(env, log_dir)
+    stats_window_size = 100
+    # Everything in the config dict is saved to wandb
+    config = {
+        "total_timesteps": 2500000,
+        "env_name": "JSBSim-v0",
+    }
 
-env_checker.check_env(env)
+    log_dir = f"logs/" + datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
+    os.makedirs(log_dir, exist_ok=True)
+    #
+    # vec_env = PositionReward(JSBSimEnv(), 1e-2)
+    # vec_env = Monitor(vec_env, log_dir)
 
-# policy_kwargs = dict(features_extractor_class=JSBSimFeatureExtractor, ) policy_kwargs=policy_kwargs,
-models_dir = f"models/best_PPO_model"
-if os.path.exists(models_dir + ".zip"):
-    print("Continuing work on " + models_dir)
-    model = PPO.load(models_dir, env, verbose=1, tensorboard_log=log_dir, gradient_steps=-1, device='auto', learning_rate=linear_schedule(0.001))
-else:
-    print("Creating a new model")
-    model = PPO('MlpPolicy', env, verbose=1, tensorboard_log=log_dir, device='auto', learning_rate=linear_schedule(0.001))
+    vec_env = make_vec_env("JSBSim-v0", n_envs=30, seed=np.random.randint(0, 2 ** 31 - 1), vec_env_cls=SubprocVecEnv, )
+    vec_env = VecMonitor(vec_env, log_dir)
+    # env_checker.check_env(vec_env/\)
 
-callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir, stats_window_size=stats_window_size)
-logger = Logger(folder=log_dir, output_formats=[WandbOutputFormat(name=datetime.now().strftime("%H:%M:%S"), project="FlyToPoint", config=config),
-                                                HumanOutputFormat(sys.stdout)])
-model.set_logger(logger)
+    # policy_kwargs = dict(features_extractor_class=JSBSimFeatureExtractor, ) policy_kwargs=policy_kwargs,
+    models_dir = f"models/best_PPO_model"
+    if os.path.exists(models_dir + ".zip"):
+        print("Continuing work on " + models_dir)
+        model = PPO.load(models_dir, vec_env, verbose=1, tensorboard_log=log_dir, gradient_steps=-1, device='auto', learning_rate=linear_schedule(0.001))
+    else:
+        print("Creating a new model")
+        model = PPO('MlpPolicy', vec_env, verbose=1, tensorboard_log=log_dir, device='auto', learning_rate=linear_schedule(0.001))
 
-# for i in range(1, 2):
-model.learn(total_timesteps=int(config["total_timesteps"]), callback=[callback])
-# logger.close() WandbCallback(gradient_save_freq=100, model_save_path=f"models/{run.id}", verbose=2)
-env.close()
-# run.finish()
+    # logger = Logger(folder=log_dir, output_formats=[WandbOutputFormat(name=datetime.now().strftime("%H:%M:%S"), project="FlyToPoint", config=config),
+    #                                                 HumanOutputFormat(sys.stdout)])
+    logger = Logger(folder=log_dir, output_formats=[HumanOutputFormat(sys.stdout)])
+    model.set_logger(logger)
+
+    # for i in range(1, 2):
+    callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir, stats_window_size=stats_window_size)
+    model.learn(total_timesteps=int(config["total_timesteps"]), callback=[callback])
+    # logger.close() WandbCallback(gradient_save_freq=100, model_save_path=f"models/{run.id}", verbose=2)
+    vec_env.close()
+
+    # if os.path.exists(models_dir + ".zip"):
+    #     env = gym.make("JSBSim-v0", )
+    #     best_model = PPO.load(models_dir, env)
+    #     model_vec_env = best_model.get_env()
+    #     obs = model_vec_env.reset()
+    #     done = False
+    #     rewards_sum = 0
+    #     while not done:
+    #         action, _ = best_model.predict(obs, deterministic=True)
+    #         obs, rewards, done, info = model_vec_env.step(action)
+    #         rewards_sum += rewards
+    #     self.best_mean_reward = np.mean(rewards_sum)
+
+    # run.finish()
 # run = wandb.init(
 #     project="sb3",
 #     config=config,

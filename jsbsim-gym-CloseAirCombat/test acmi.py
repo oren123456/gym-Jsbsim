@@ -22,14 +22,12 @@ model = PPO.load(models_dir, env)
 vec_env = model.get_env()
 obs = vec_env.reset()
 done = False
-step = 0
 env.metadata["render_modes"] = ["rgb_array"]
 while not done:
     render_data = env.render()
     action, _ = model.predict(obs, deterministic=True)
     obs, rewards, done, info = vec_env.step(action)
     env.render()
-    step += 1
 
 env.close()
 
