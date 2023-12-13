@@ -17,18 +17,21 @@ RL_algo = "PPO"
 models_dir = f"models/best_PPO_model"
 
 model = PPO.load(models_dir, env)
-
-
+print("Loaded model from " + models_dir)
 vec_env = model.get_env()
 obs = vec_env.reset()
 done = False
-env.metadata["render_modes"] = ["rgb_array"]
+# env.metadata["render_modes"] = ["rgb_array"]
+steps = 0
+rewards_sum = 0
 while not done:
-    render_data = env.render()
+    # render_data = env.render()
     action, _ = model.predict(obs, deterministic=True)
     obs, rewards, done, info = vec_env.step(action)
+    rewards_sum += rewards
+    steps += 1
     env.render()
-
+print(f'Finished after {steps} steps. Reward: {rewards_sum}')
 env.close()
 
 # env = TimeLimit(env, max_episode_steps=10000)
