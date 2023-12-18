@@ -6,7 +6,7 @@ from stable_baselines3 import SAC, PPO, common
 import time
 import os
 from typing import Callable
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback, EvalCallback, ProgressBarCallback
 from stable_baselines3.common import env_checker
 import numpy as np
 from stable_baselines3.common.results_plotter import load_results, ts2xy
@@ -22,8 +22,9 @@ from config import get_config
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.utils import set_random_seed
 # from stable_baselines3.common.envs import VecNormalize
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, VecFrameStack
 from stable_baselines3.common.atari_wrappers import MaxAndSkipEnv
+from stable_baselines3.common.evaluation import evaluate_policy
 import multiprocessing
 import gymnasium as gym
 import torch
@@ -33,36 +34,6 @@ import torch
 import logging
 
 from jsbsim_gym.jsbsim_gym import JSBSimEnv
-
-
-class WandbOutputFormat(KVWriter):
-    """   Dumps key/value pairs into TensorBoard's numeric format.   """
-
-    def __init__(self, config: Dict = None, project: Optional[str] = None, name: Optional[str] = None):
-        self.run = wandb.init(
-            project=project,
-            name=name,
-            config=config,
-            # sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
-            # monitor_gym=True,  # auto-upload the videos of agents playing the game
-            # save_code=True,  # optional
-        )
-
-    def write(self, key_values: Dict[str, Any], key_excluded: Dict[str, Tuple[str, ...]], step: int = 0) -> None:
-        # print(f"Start:{step}")
-        outputs = {}
-        for (key, value), (_, excluded) in zip(sorted(key_values.items()), sorted(key_excluded.items())):
-            if excluded is not None and "tensorboard" in excluded:
-                continue
-            # print(f"{key}:{value}")
-            outputs[key] = value
-        wandb.log(outputs, step=step)
-
-    def close(self) -> None:
-        """
-        closes the file
-        """
-        self.run.finish()
 
 
 class SaveOnBestTrainingRewardCallback(BaseCallback):
@@ -104,6 +75,9 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         if self.n_calls % self.check_freq == 0:
             # Retrieve training reward
             # x is time array & y is reward array
+            print('aaaa')
+            print(evaluate_policy(self.model, JSBSimEnv(), n_eval_episodes=10, ))
+
             x, y = ts2xy(load_results(self.log_dir), "timesteps")
             if len(x) > 0:
                 # Mean training reward over the last 100 episodes
@@ -148,30 +122,68 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     stats_window_size = 100
-
-    log_dir = f"logs/" + datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
+    log_path = os.path.join('logs', datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
+    # log_dir = f"logs/" + datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
     # os.makedirs(log_dir, exist_ok=True)
     # vec_env = JSBSimEnv()
     # vec_env = Monitor(vec_env, log_dir)  # used by the tenser board
     # env_checker.check_env(vec_env)
     #
-    set_random_seed(5)
-    vec_env = make_vec_env("JSBSim-v0", n_envs=10, seed=5, vec_env_cls=SubprocVecEnv, monitor_dir=log_dir)
-    vec_env.reset()
+    # set_random_seed(5)
+    num_of_envs = 5
+    vec_env = make_vec_env("JSBSim-v0", n_envs=num_of_envs, seed=5, vec_env_cls=SubprocVecEnv, monitor_dir=log_path)
+    vec_env = VecFrameStack(vec_env, n_stack=num_of_envs)
+    # vec_env.reset()
 
     # policy_kwargs = dict(features_extractor_class=JSBSimFeatureExtractor, ) policy_kwargs=policy_kwargs,
     models_dir = f"models/best_PPO_model"
     if os.path.exists(models_dir + ".zip"):
         print("Continuing work on " + models_dir)
-        model = PPO.load(models_dir, vec_env, verbose=1, tensorboard_log=log_dir, gradient_steps=-1, device='auto')  # , learning_rate=linear_schedule(0.0001)
+        model = PPO.load(models_dir, vec_env, verbose=1, tensorboard_log=log_path, gradient_steps=-1, device='auto')  # , learning_rate=linear_schedule(0.0001)
     else:
         print("Creating a new model")
-        model = PPO('MlpPolicy', vec_env, verbose=1, tensorboard_log=log_dir, device='auto')  # , learning_rate=linear_schedule(0.0001)
+        model = PPO('MlpPolicy', vec_env, verbose=1, tensorboard_log=log_path, device='auto')  # , learning_rate=linear_schedule(0.0001)
 
-    callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=log_dir, models_dir=models_dir, stats_window_size=stats_window_size)
-    model.learn(total_timesteps=2500000, callback=[callback])
+    eval_callback = EvalCallback(JSBSimEnv(), best_model_save_path="./logs/",
+                                 log_path="./logs/", eval_freq=5000,
+                                 deterministic=True, render=False)
+
+    callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_path, models_dir=models_dir, stats_window_size=stats_window_size)
+    model.learn(total_timesteps=2500000, progress_bar=True, )
     # logger.close() WandbCallback(gradient_save_freq=100, model_save_path=f"models/{run.id}", verbose=2)
     vec_env.close()
+
+    #
+    # class WandbOutputFormat(KVWriter):
+    #     """   Dumps key/value pairs into TensorBoard's numeric format.   """
+    #
+    #     def __init__(self, config: Dict = None, project: Optional[str] = None, name: Optional[str] = None):
+    #         self.run = wandb.init(
+    #             project=project,
+    #             name=name,
+    #             config=config,
+    #             # sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
+    #             # monitor_gym=True,  # auto-upload the videos of agents playing the game
+    #             # save_code=True,  # optional
+    #         )
+    #
+    #     def write(self, key_values: Dict[str, Any], key_excluded: Dict[str, Tuple[str, ...]], step: int = 0) -> None:
+    #         # print(f"Start:{step}")
+    #         outputs = {}
+    #         for (key, value), (_, excluded) in zip(sorted(key_values.items()), sorted(key_excluded.items())):
+    #             if excluded is not None and "tensorboard" in excluded:
+    #                 continue
+    #             # print(f"{key}:{value}")
+    #             outputs[key] = value
+    #         wandb.log(outputs, step=step)
+    #
+    #     def close(self) -> None:
+    #         """
+    #         closes the file
+    #         """
+    #         self.run.finish()
+
+    # print(vec_env.action_space.sample())
 
     # Everything in the config dict is saved to wandb
     # config = {

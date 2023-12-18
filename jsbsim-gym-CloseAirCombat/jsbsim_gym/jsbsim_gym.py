@@ -128,7 +128,7 @@ class JSBSimEnv(gym.Env):
 
         self.observation_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (12,))
         # self.observation_space = gym.spaces.Box(low=-10, high=10., shape=(21,))
-        self.action_space = gym.spaces.Box(-1, 1, (4,))
+        self.action_space = gym.spaces.Box(-1, 1, (4,), np.float32)
         # self.action_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (15,))
 
         self.metadata["render_modes"] = ["rgb_array"]
