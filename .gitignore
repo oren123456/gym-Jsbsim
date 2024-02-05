@@ -19,3 +19,4 @@ jsbsim/
 *.pt
 */wandb
 CloseAirCombat-DSI-RL/scripts/results/SingleControl/1/heading/ppo/v1/wandb/
+Path Finder/scenarios/
