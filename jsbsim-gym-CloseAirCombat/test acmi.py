@@ -14,7 +14,7 @@ env = gym.make("JSBSim-v0", )
 RL_algo = "PPO"
 # RL_algo= "SAC"
 
-models_dir = f"models/best_PPO_model"
+models_dir = f"models/best_model"
 
 model = PPO.load(models_dir, env)
 print("Loaded model from " + models_dir)

@@ -5,13 +5,13 @@ import gymnasium as gym
 import numpy as np
 from typing import Optional
 
-from .visualization.rendering import Viewer, load_mesh, load_shader, RenderObject, Grid
-from .visualization.quaternion import Quaternion
+# from .visualization.rendering import Viewer, load_mesh, load_shader, RenderObject, Grid
+# from .visualization.quaternion import Quaternion
 from numpy.linalg import norm
 from gymnasium.utils import seeding
 import os
 
-import pymap3d
+# import pymap3d
 
 # Initialize format for the environment state vector
 STATE_FORMAT = [
@@ -126,7 +126,7 @@ class JSBSimEnv(gym.Env):
         self.max_altitude_increment = 7000  # feet
         self.max_velocities_u_increment = 100  # meter
 
-        self.observation_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (12,))
+        self.observation_space = gym.spaces.Box(np.float32(STATE_LOW), np.float32(STATE_HIGH), (12,), dtype=np.float32)
         # self.observation_space = gym.spaces.Box(low=-10, high=10., shape=(21,))
         self.action_space = gym.spaces.Box(-1, 1, (4,), np.float32)
         # self.action_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (15,))
@@ -232,7 +232,7 @@ class JSBSimEnv(gym.Env):
         speed_r = math.exp(-(math.pow(self.state[2] / 24, 2)))  # speed_error_scale mps (~10%)
         # reward = (heading_r * alt_r * roll_r * speed_r) ** (1 / 4)
         # reward = math.pow(heading_r * roll_r * alt_r * speed_r, 1 / 4)
-        reward = (heading_r + alt_r + roll_r + speed_r)/4
+        reward = (heading_r + alt_r + roll_r + speed_r) / 4
         # print(f'{heading_r}:{alt_r}:{roll_r}:{speed_r}')
         # Altitude reward
         ego_z = self.simulation.get_property_value("position/h-sl-ft") * 0.3048 / 1000  # unit: km
@@ -274,7 +274,7 @@ class JSBSimEnv(gym.Env):
         reward = self.get_reward()
         done = self.get_termination()
 
-        ep_info={}
+        ep_info = {}
         if done:
             ep_info = {"turns": self.heading_turn_counts}
         # return np.hstack([self.state, self.goal], dtype=np.float32), reward, done, False#, ep_info
