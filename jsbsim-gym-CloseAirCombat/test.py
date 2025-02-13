@@ -1,6 +1,4 @@
-import jsbsim_gym.jsbsim_gym  # This line makes sure the environment is registered
 from jsbsim_gym.features import JSBSimFeatureExtractor
-from jsbsim_gym.jsbsim_gym import JSBSimEnv
 from stable_baselines3 import SAC, PPO
 import gymnasium as gym
 from gymnasium.wrappers.monitoring.video_recorder import VideoRecorder

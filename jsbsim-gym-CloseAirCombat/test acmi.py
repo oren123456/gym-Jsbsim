@@ -1,9 +1,6 @@
-import jsbsim_gym.jsbsim_gym  # This line makes sure the environment is registered
 from jsbsim_gym.features import JSBSimFeatureExtractor
-from jsbsim_gym.jsbsim_gym import JSBSimEnv
-from stable_baselines3 import SAC, PPO
+from stable_baselines3 import PPO
 import gymnasium as gym
-from gymnasium.wrappers.monitoring.video_recorder import VideoRecorder
 
 policy_kwargs = dict(
     features_extractor_class=JSBSimFeatureExtractor
@@ -14,7 +11,7 @@ env = gym.make("JSBSim-v0", )
 RL_algo = "PPO"
 # RL_algo= "SAC"
 
-models_dir = f"models/best_PPO_model"
+models_dir = f"models/best_model"
 
 model = PPO.load(models_dir, env)
 print("Loaded model from " + models_dir)

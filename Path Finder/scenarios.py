@@ -177,7 +177,7 @@ def create_cost_grids(folder_path):
         frames.append(Image.open(f'{grd_path}.png'))
 
     frames[0].save(f'{folder_path}/score_animation.gif', save_all=True, append_images=frames[1:], duration=200, loop=0)
-    merge_gifs_vertical(f'{folder_path}/score_animation.gif', f'{folder_path}/scenario_animation.gif', f'{folder_path}/result.gif')
+    merge_gifs_vertical(f'{folder_path}/score_animation.gif', f'{folder_path}/scenario_animation.gif', f'{folder_path}/cost&threats.gif')
 
 
 def find_lowest_cost_to_point(folder_path, point):
@@ -232,10 +232,10 @@ if __name__ == "__main__":
     # num_of_scenarios = 1
     # for _ in range(num_of_scenarios):
     #     create_scenario(grid_size=50, steps=100, number_of_threats=25, threat_radius_min=1, threat_radius_max=20)
-    f_path = 'C:/GitHub/gym-Jsbsim/Path Finder/scenarios/2024-02-12_17-01-28/'
-    # create_cost_grids(f_path)
-    point1 = (0, 49)
-    find_path(f_path, point1, find_lowest_cost_to_point(f_path, point1))
+    f_path = 'C:/GitHub/gym-Jsbsim/Path Finder/scenarios/2024-02-07_14-29-01/'
+    create_cost_grids(f_path)
+    # point1 = (49, 49)
+    # find_path(f_path, point1, find_lowest_cost_to_point(f_path, point1))
 
     # print(loaded_grids)
     # print(grid_scores)

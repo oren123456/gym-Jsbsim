@@ -1,100 +1,62 @@
-import sys
-import gymnasium
-import jsbsim_gym.jsbsim_gym  # This line makes sure the environment is registered
-from jsbsim_gym.features import JSBSimFeatureExtractor
-from stable_baselines3 import SAC, PPO, common
-import time
+from stable_baselines3 import PPO
 import os
 from typing import Callable
-from stable_baselines3.common.callbacks import BaseCallback, EvalCallback, ProgressBarCallback
-from stable_baselines3.common import env_checker
+from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 import numpy as np
-from stable_baselines3.common.results_plotter import load_results, ts2xy
-from stable_baselines3.common.monitor import Monitor
-from collections import deque
-from stable_baselines3.common.utils import safe_mean
-import wandb
-from wandb.integration.sb3 import WandbCallback
-from stable_baselines3.common.logger import Logger, KVWriter, HumanOutputFormat
-from typing import Any, Dict, Optional, Tuple
 from datetime import datetime
-from config import get_config
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.utils import set_random_seed
-# from stable_baselines3.common.envs import VecNormalize
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, VecFrameStack
-from stable_baselines3.common.atari_wrappers import MaxAndSkipEnv
-from stable_baselines3.common.evaluation import evaluate_policy
-import multiprocessing
-import gymnasium as gym
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecFrameStack
+from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_results
+from stable_baselines3.common import results_plotter
+import matplotlib.pyplot as plt
+from jsbsim_gym.features import JSBSimFeatureExtractor
 import torch
-
-# from envs.JSBSim.envs import SingleCombatEnv, SingleControlEnv, MultipleCombatEnv
-# from envs.env_wrappers import DummyVecEnv, ShareDummyVecEnv
-import logging
-
-from jsbsim_gym.jsbsim_gym import JSBSimEnv
 
 
 class SaveOnBestTrainingRewardCallback(BaseCallback):
     """
     Callback for saving a model (the check is done every ``check_freq`` steps)
     based on the training reward (in practice, we recommend using ``EvalCallback``).
+
     :param check_freq:
     :param log_dir: Path to the folder where the model will be saved.
       It must contains the file created by the ``Monitor`` wrapper.
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, check_freq: int, log_dir: str, models_dir: str, stats_window_size: int, verbose: int = 1):
-        super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)
+    def __init__(self, check_freq: int, log_dir: str, best_model_dir: str, verbose: int = 1):
+        super().__init__(verbose)
         self.check_freq = check_freq
         self.log_dir = log_dir
         self.save_path = os.path.join(log_dir, "best_model")
         self.best_mean_reward = -np.inf
-        self.models_dir = models_dir
-        self.my_info_buffer = None  # type: Optional[deque]
-        self._stats_window_size = stats_window_size
-        # self.local_time = time.time()
-        # Initialize deque with a maximum length of 10
-        self.my_info_buffer = deque(maxlen=10)
+        self.best_model_dir = best_model_dir
 
-        if self.my_info_buffer is None:
-            self.my_info_buffer = deque(maxlen=self._stats_window_size)
+    def _init_callback(self) -> None:
+        # Create folder if needed
+        if self.save_path is not None:
+            os.makedirs(self.save_path, exist_ok=True)
 
     def _on_step(self) -> bool:
-        # Add debug info at the end of each episode
-        if "infos" in self.locals:
-            info = self.locals['infos'][0]
-            if "turns" in info:
-                self.my_info_buffer.extend([{"turns": info['turns']}])
-                self.logger.record("oren/turns", safe_mean([ep_info["turns"] for ep_info in self.my_info_buffer]))
-                # self.logger.record("oren/turns",np.mean(y[-100:])
-            # self.logger.record("oren/goal", safe_mean([ep_info["goal"] for ep_info in self.my_info_buffer]))
-
         if self.n_calls % self.check_freq == 0:
             # Retrieve training reward
-            # x is time array & y is reward array
-            print('aaaa')
-            print(evaluate_policy(self.model, JSBSimEnv(), n_eval_episodes=10, ))
-
             x, y = ts2xy(load_results(self.log_dir), "timesteps")
             if len(x) > 0:
                 # Mean training reward over the last 100 episodes
                 mean_reward = np.mean(y[-100:])
                 if self.verbose >= 1:
                     print(f"Num timesteps: {self.num_timesteps}")
-                    print(f"Best mean reward:{self.best_mean_reward:.2f}-Last mean reward per episode: {mean_reward:.2f}")
+                    print(f"Best mean reward: {self.best_mean_reward:.2f} - Last mean reward per episode: {mean_reward:.2f}")
 
                 # New best model, you could save the agent here
                 if mean_reward > self.best_mean_reward:
                     self.best_mean_reward = mean_reward
                     # Example for saving best model
                     if self.verbose >= 1:
-                        print(f"Saving new best model to {self.save_path}")
-                        print(f"Saving new best model to {self.models_dir}")
-                    self.model.save(self.save_path)
-                    self.model.save(self.models_dir)
+                        print(f"Saving new best model to {self.best_model_dir}")
+                    self.model.save(self.best_model_dir)
+                    self.model.save(self.log_dir)
+
         return True
 
 
@@ -119,38 +81,41 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
 
 
 if __name__ == '__main__':
-    multiprocessing.freeze_support()
+    # multiprocessing.freeze_support()
+    print(f'cuda.is_available: {torch.cuda.is_available()}')
 
     stats_window_size = 100
-    log_path = os.path.join('logs', datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
-    # log_dir = f"logs/" + datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
-    # os.makedirs(log_dir, exist_ok=True)
-    # vec_env = JSBSimEnv()
-    # vec_env = Monitor(vec_env, log_dir)  # used by the tenser board
-    # env_checker.check_env(vec_env)
-    #
+    log_dir = os.path.join('logs', datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
+
     # set_random_seed(5)
-    num_of_envs = 5
-    vec_env = make_vec_env("JSBSim-v0", n_envs=num_of_envs, seed=5, vec_env_cls=SubprocVecEnv, monitor_dir=log_path)
-    vec_env = VecFrameStack(vec_env, n_stack=num_of_envs)
+    num_of_envs = 10
+    vec_env = make_vec_env("JSBSim-v0", n_envs=num_of_envs, seed=5, vec_env_cls=SubprocVecEnv, monitor_dir=log_dir)
+    # vec_env = VecFrameStack(vec_env, n_stack=num_of_envs)
     # vec_env.reset()
 
     # policy_kwargs = dict(features_extractor_class=JSBSimFeatureExtractor, ) policy_kwargs=policy_kwargs,
-    models_dir = f"models/best_PPO_model"
-    if os.path.exists(models_dir + ".zip"):
+    models_dir = f"models"
+    if not os.path.exists(models_dir + "/best_model.zip"):
         print("Continuing work on " + models_dir)
-        model = PPO.load(models_dir, vec_env, verbose=1, tensorboard_log=log_path, gradient_steps=-1, device='auto')  # , learning_rate=linear_schedule(0.0001)
+        model = PPO.load(models_dir, vec_env, verbose=1, tensorboard_log=log_dir, device='cpu')  # , learning_rate=linear_schedule(0.0001)
     else:
         print("Creating a new model")
-        model = PPO('MlpPolicy', vec_env, verbose=1, tensorboard_log=log_path, device='auto')  # , learning_rate=linear_schedule(0.0001)
+        model = PPO('MlpPolicy', vec_env, verbose=1, tensorboard_log=log_dir, device='cpu')  # , learning_rate=linear_schedule(0.0001)
 
-    eval_callback = EvalCallback(JSBSimEnv(), best_model_save_path="./logs/",
-                                 log_path="./logs/", eval_freq=5000,
-                                 deterministic=True, render=False)
+    callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_dir, best_model_dir=models_dir)
 
-    callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_path, models_dir=models_dir, stats_window_size=stats_window_size)
-    model.learn(total_timesteps=2500000, progress_bar=True, )
+    eval_callback = EvalCallback(vec_env, best_model_save_path=models_dir,
+                                 log_path=log_dir, eval_freq=max(5000 // num_of_envs, 1),
+                                 n_eval_episodes=5, deterministic=True,
+                                 render=True)
+
+
+
+    timesteps = 1e5
+    model.learn(total_timesteps=int(timesteps), progress_bar=True, callback=eval_callback)
     # logger.close() WandbCallback(gradient_save_freq=100, model_save_path=f"models/{run.id}", verbose=2)
+    plot_results([log_dir], timesteps, results_plotter.X_TIMESTEPS, "JSBSIM Basic Fly ")
+    plt.show()
     vec_env.close()
 
     #
