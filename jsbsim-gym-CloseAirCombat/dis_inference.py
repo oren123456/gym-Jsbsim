@@ -1,6 +1,8 @@
+import math
+
 from jsbsim_gym.features import JSBSimFeatureExtractor
 from jsbsim_gym.jsbsim_gym import JSBSimEnv
-from stable_baselines3 import SAC, PPO
+from stable_baselines3 import  PPO
 import gymnasium as gym
 
 import socket
@@ -33,20 +35,8 @@ latest_loc = None
 
 
 def move_forward(loc, step_size_in_meters):
-    """
-    Moves 1 km forward based on the given geocentric location and orientation.
-
-    Args:
-    loc (tuple): (x, y, z, psi, theta, phi) where
-                 x, y, z are ECEF coordinates,
-                 psi is yaw (heading) in radians,
-                 theta is pitch in radians.
-
-    Returns:
-    tuple: (new_x, new_y, new_z) - Updated geocentric position
-    """
     # Unpack geocentric coordinates and angles
-    x, y, z, psi, theta, phi = loc
+    x, y, z, psi, theta, phi, _, _, _ = loc
 
     # Forward movement direction in ECEF
     dx = np.cos(theta) * np.cos(psi)
@@ -66,7 +56,7 @@ def recv():
     pduTypeName = pdu.__class__.__name__
 
     if pdu.pduType == 1:  # PduTypeDecoders.EntityStatePdu:
-        if pdu.entityID.entityID == 44:
+        if pdu.entityID.entityID != 44:
             loc = (pdu.entityLocation.x,
                    pdu.entityLocation.y,
                    pdu.entityLocation.z,
@@ -99,7 +89,7 @@ def reset_env(simulation):
     _, _, _, psi, theta, phi, v_east_fps, v_north_fps, v_down_fps = latest_loc
     x, y, z = move_forward(latest_loc, 1000)
     body = gps.ecef2llarpy(x, y, z, psi, theta, phi)
-
+    vel = math.sqrt(v_east_fps ** 2 + v_north_fps ** 2)
     default_condition = {
         "ic/long-gc-deg": rad2deg(body[1]),  # geodesic longitude [deg]
         "ic/lat-geod-deg": rad2deg(body[0]),  # geodesic latitude  [deg]
@@ -121,7 +111,7 @@ def reset_env(simulation):
     print("reset")
 
 
-def send_entityStatePdu(simulation):
+def send_entity_state_pdu(simulation):
     pdu = EntityStatePdu()
     pdu.entityID.entityID = 42
     pdu.entityID.siteID = 17
@@ -147,58 +137,139 @@ def send_entityStatePdu(simulation):
     pdu.entityLocation = Vector3Double(montereyLocation[0], montereyLocation[1], montereyLocation[2])
     pdu.entityOrientation = EulerAngles(montereyLocation[3], montereyLocation[4], montereyLocation[5])
 
-    FT_TO_M = 0.3048
-    v_east_fps = simulation.get_property_value("velocities/v-east-fps") * FT_TO_M
-    v_north_fps = simulation.get_property_value("velocities/v-north-fps") * FT_TO_M
-    v_down_fps = simulation.get_property_value("velocities/v-down-fps") * FT_TO_M
+    ft_to_m = 0.3048
+    v_east_fps = simulation.get_property_value("velocities/v-east-fps") * ft_to_m
+    v_north_fps = simulation.get_property_value("velocities/v-north-fps") * ft_to_m
+    v_down_fps = simulation.get_property_value("velocities/v-down-fps") * ft_to_m
     pdu.entityLinearVelocity = Vector3Float(v_east_fps, v_north_fps, v_down_fps)
 
-    memoryStream = BytesIO()
-    outputStream = DataOutputStream(memoryStream)
-    pdu.serialize(outputStream)
-    data = memoryStream.getvalue()
+    memory_stream = BytesIO()
+    output_stream = DataOutputStream(memory_stream)
+    pdu.serialize(output_stream)
+    data = memory_stream.getvalue()
     udpSocket_s.sendto(data, (DESTINATION_ADDRESS, UDP_PORT))
     # print(f"{montereyLocation}")
 
 
+def update_labels(root):
+    """Update labels with new values (dummy example, replace with real values)."""
+    if latest_loc != None:
+        x, y, z, psi, theta, phi, v_east_fps, v_north_fps, v_down_fps = latest_loc
+        body = gps.ecef2llarpy(x, y, z, psi, theta, phi)
+        # print("Latitude  : {:.2f} degrees\n".format(rad2deg(body[0]))
+        #       + " Longitude : {:.2f} degrees\n".format(rad2deg(body[1]))
+        #       + " Altitude  : {:.0f} meters\n".format(body[2])
+        #       + " Yaw       : {:.2f} degrees\n".format(rad2deg(body[3]))
+        #       + " Pitch     : {:.2f} degrees\n".format(rad2deg(body[4]))
+        #       + " Roll      : {:.2f} degrees\n".format(rad2deg(body[5]))
+        #       )
+        speed = math.sqrt(v_east_fps ** 2 + v_north_fps ** 2)*0.3048
+        # Update labels stored in root
+        root.alt_label.config(text=f"altitude(f): {body[2]:.2f}")
+        root.heading_label.config(text=f"heading(deg): {rad2deg(body[3]):.2f}")
+        root.speed_label.config(text=f"Speed(m/s): {speed:.2f}")
+    # Call this function again after 1 second
+    root.after(500, lambda: update_labels(root))
+
+
+def submit_id(root):
+    print(int(root.id_entry_box.get()))  # Get input and convert to integer)
+
+
+def submit_location(root):
+    print(int(root.long_entry_box.get()))  # Get input and convert to integer)
+
+
+def submit_turn_command(root, env):
+    env.target_heading_deg = int(root.heading_entry_box.get())
+    env.target_altitude_ft = int(root.alt_entry_box.get())
+    env.target_velocities_u_mps = int(root.speed_entry_box.get())
+
+
 # Tkinter GUI setup
-def create_gui(simulation):
+def create_gui(sim_env):
     root = tk.Tk()
     root.title("Control Panel")
-    root.geometry("200x100")
+    root.geometry("400x250")
 
-    reset_button = tk.Button(root, text="Reset Env", command=lambda: reset_env(simulation))
-    reset_button.pack(pady=20)
+    button_frame = tk.Frame(root)
+    button_frame.pack(side=tk.TOP, anchor="w", pady=5, padx=5)
+    reset_button = tk.Button(button_frame, text="Reset Env", command=lambda: reset_env())
+    reset_button.pack(side=tk.LEFT)
+    # **Frame for Labels**
+    labels_frame = tk.Frame(root)
+    labels_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.alt_label = tk.Label(labels_frame, text="altitude(f)", font=("Arial", 8))
+    root.alt_label.pack(anchor="w")
+    root.heading_label = tk.Label(labels_frame, text="heading(deg)", font=("Arial", 8))
+    root.heading_label.pack(anchor="w")
+    root.speed_label = tk.Label(labels_frame, text="Speed(m/s)", font=("Arial", 8))
+    root.speed_label.pack(anchor="w")
+    # **Entry Box for Track Entity ID (Inside a Frame)**
+    id_frame = tk.Frame(root)
+    id_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.input_label = tk.Label(id_frame, text="track entity id:", font=("Arial", 8))
+    root.input_label.pack(side=tk.LEFT)
+    root.id_entry_box = tk.Entry(id_frame, font=("Arial", 8), width=8)
+    root.id_entry_box.pack(side=tk.LEFT, padx=5)
+    submit_button = tk.Button(id_frame, text="Submit", font=("Arial", 8), command=lambda: submit_id(root))
+    submit_button.pack(side=tk.RIGHT, padx=5)
+    # # **Entry Box for Set Location**
+    location_frame = tk.Frame(root)
+    location_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.location_input_label = tk.Label(location_frame, text="set location: lan", font=("Arial", 8))
+    root.location_input_label.pack(side=tk.LEFT)
+    root.long_entry_box = tk.Entry(location_frame, font=("Arial", 8), width=8)
+    root.long_entry_box.pack(side=tk.LEFT)
+    root.long_input_label = tk.Label(location_frame, text="long", font=("Arial", 8))
+    root.long_input_label.pack(side=tk.LEFT, padx=5)
+    root.lat_entry_box = tk.Entry(location_frame, font=("Arial", 8), width=8)
+    root.lat_entry_box.pack(side=tk.LEFT)
+    submit_button = tk.Button(location_frame, text="Submit", font=("Arial", 8), command=lambda: submit_location(root))
+    submit_button.pack(side=tk.RIGHT, padx=5)  # Add spacing
+    # **Set heading , alt, speed**
+    turn_frame = tk.Frame(root)
+    turn_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.heading_input_label = tk.Label(turn_frame, text="heading(deg):", font=("Arial", 8))
+    root.heading_input_label.pack(side=tk.LEFT)
+    root.heading_entry_box = tk.Entry(turn_frame, font=("Arial", 8), width=5)
+    root.heading_entry_box.pack(side=tk.LEFT, padx=5)
+    root.alt_input_label = tk.Label(turn_frame, text="alt(f):", font=("Arial", 8))
+    root.alt_input_label.pack(side=tk.LEFT)
+    root.alt_entry_box = tk.Entry(turn_frame, font=("Arial", 8), width=5)
+    root.alt_entry_box.pack(side=tk.LEFT, padx=5)
+    root.speed_input_label = tk.Label(turn_frame, text="speed(m/s):", font=("Arial", 8))
+    root.speed_input_label.pack(side=tk.LEFT)
+    root.speed_entry_box = tk.Entry(turn_frame, font=("Arial", 8), width=5)
+    root.speed_entry_box.pack(side=tk.LEFT, padx=5)
+    submit_button = tk.Button(turn_frame, text="Submit", font=("Arial", 8), command=lambda: submit_turn_command(root, sim_env))
+    submit_button.pack(side=tk.RIGHT)
+    # **Button Next to Entry Box**
+    input_frame = tk.Frame(root)
+    input_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.input_label = tk.Label(input_frame, text="Enter an integer above.", font=("Arial", 12))
+    root.input_label.pack()
 
+    # Start updating labels
+    update_labels(root)
     root.mainloop()
 
-
-env = gym.make("JSBSim-v0", )
-RL_algo = "PPO"
+env = gym.make("JSBSim-v0")
 models_dir = f"models/best_model"
-model = PPO.load(models_dir, env)
+model = PPO.load(models_dir, env, device="cpu")
 print("Loaded model from " + models_dir)
-vec_env = model.get_env()
-obs = vec_env.reset()
+obs, info = env.reset()
 done = False
-# env.metadata["render_modes"] = ["rgb_array"]
 steps = 0
 rewards_sum = 0
-sim = vec_env.get_attr("simulation")[0]
+sim_env = env.unwrapped
 
 # Run the GUI in a separate thread so the main loop continues
-threading.Thread(target=create_gui, args=(sim,), daemon=True).start()
-
+threading.Thread(target=create_gui, args=(sim_env,), daemon=True).start()
 while True:
     action, _ = model.predict(obs, deterministic=True)
-    obs, _, _, _ = vec_env.step(action)
-    send_entityStatePdu(sim)
+    obs, rewards, done, _ , info = env.step(action)
+    send_entity_state_pdu(sim_env.simulation)
     latest_loc = recv()
     time.sleep(1)
-
-    # init_heading = np_random.uniform(0., 180.)
-    # init_altitude = np_random.uniform(14000., 30000.)
-    # init_velocities_u = np_random.uniform(400., 1200.)
-
-print(f'Finished after {steps} steps. Reward: {rewards_sum}')
 env.close()

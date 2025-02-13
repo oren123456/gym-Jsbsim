@@ -23,3 +23,9 @@ Path Finder/scenarios/
 /CloseAirCombat-master-org
 /open-dis-python-master_bu
 /BU/Path Finder/scenarios
+*.acmi
+*.zip
+*.txt
+jsbsim-gym-CloseAirCombat/requirements.txt
+Path Finder/.idea/workspace.xml
+/jsbsim-gym-CloseAirCombat/.idea

@@ -88,14 +88,14 @@ if __name__ == '__main__':
     log_dir = os.path.join('logs', datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
 
     # set_random_seed(5)
-    num_of_envs = 10
+    num_of_envs = 30
     vec_env = make_vec_env("JSBSim-v0", n_envs=num_of_envs, seed=5, vec_env_cls=SubprocVecEnv, monitor_dir=log_dir)
     # vec_env = VecFrameStack(vec_env, n_stack=num_of_envs)
     # vec_env.reset()
 
     # policy_kwargs = dict(features_extractor_class=JSBSimFeatureExtractor, ) policy_kwargs=policy_kwargs,
-    models_dir = f"models"
-    if not os.path.exists(models_dir + "/best_model.zip"):
+    models_dir = "models/best_model.zip"
+    if os.path.exists(models_dir):
         print("Continuing work on " + models_dir)
         model = PPO.load(models_dir, vec_env, verbose=1, tensorboard_log=log_dir, device='cpu')  # , learning_rate=linear_schedule(0.0001)
     else:
@@ -109,10 +109,8 @@ if __name__ == '__main__':
                                  n_eval_episodes=5, deterministic=True,
                                  render=True)
 
-
-
-    timesteps = 1e5
-    model.learn(total_timesteps=int(timesteps), progress_bar=True, callback=eval_callback)
+    timesteps = 1e6
+    model.learn(total_timesteps=int(timesteps), progress_bar=True, callback=callback)
     # logger.close() WandbCallback(gradient_save_freq=100, model_save_path=f"models/{run.id}", verbose=2)
     plot_results([log_dir], timesteps, results_plotter.X_TIMESTEPS, "JSBSIM Basic Fly ")
     plt.show()

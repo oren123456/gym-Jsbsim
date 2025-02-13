@@ -1,30 +1,30 @@
 from jsbsim_gym.features import JSBSimFeatureExtractor
 from stable_baselines3 import PPO
 import gymnasium as gym
+from stable_baselines3.common.vec_env import VecNormalize
 
-policy_kwargs = dict(
-    features_extractor_class=JSBSimFeatureExtractor
-)
+# policy_kwargs = dict(
+#     features_extractor_class=JSBSimFeatureExtractor
+# )
 
 env = gym.make("JSBSim-v0", )
-
-RL_algo = "PPO"
-# RL_algo= "SAC"
+# env.metadata["render_modes"] = ["human"]
 
 models_dir = f"models/best_model"
-
-model = PPO.load(models_dir, env)
+model = PPO.load(models_dir, env, device="cpu",)
 print("Loaded model from " + models_dir)
-vec_env = model.get_env()
-obs = vec_env.reset()
+obs, info = env.reset()
 done = False
-# env.metadata["render_modes"] = ["rgb_array"]
 steps = 0
 rewards_sum = 0
-while not done:
+while steps<10000:
     # render_data = env.render()
     action, _ = model.predict(obs, deterministic=True)
-    obs, rewards, done, info = vec_env.step(action)
+    obs, rewards, done, _ , info = env.step(action)
+    if done:
+        if env.unwrapped.simulation.get_property_value("position/h-sl-ft") * 0.3048 <= 1000:
+            print("reset")
+            env.reset()
     rewards_sum += rewards
     steps += 1
     env.render()

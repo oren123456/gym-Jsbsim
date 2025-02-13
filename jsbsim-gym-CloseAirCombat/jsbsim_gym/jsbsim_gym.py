@@ -131,15 +131,15 @@ class JSBSimEnv(gym.Env):
         self.action_space = gym.spaces.Box(-1, 1, (4,), np.float32)
         # self.action_space = gym.spaces.Box(np.float32(STATE_LOW), STATE_HIGH, (15,))
 
-        self.metadata["render_modes"] = ["rgb_array"]
-        self.render_mode = "rgb_array"
+        # self.metadata["render_modes"] = ["txt"]
+        # self.render_mode = "txt"
 
         self.down_sample = 12
 
         self.simulation = jsbsim.FGFDMExec('.', None)
         self.simulation.set_debug_level(0)
         self.simulation.set_dt(1 / 60)
-        a = self.simulation.load_model('f16')
+        self.simulation.load_model('f16')
 
         # self.goal = np.zeros(3)
         # self.viewer = None
@@ -186,7 +186,7 @@ class JSBSimEnv(gym.Env):
         if simulation_sim_time_sec > 10:
             if math.fabs(self.simulation.get_property_value("accelerations/n-pilot-x-norm")) > self.acceleration_limit_x \
                     or math.fabs(self.simulation.get_property_value("accelerations/n-pilot-y-norm")) > self.acceleration_limit_y \
-                    or math.fabs(self.simulation.get_property_value("accelerations/n-pilot-z-norm") + 1) > self.acceleration_limit_z:
+                    or math.fabs(self.simulation.get_property_value("accelerations/n-pilot-z-norm") ) > self.acceleration_limit_z:
                 flag_overload = True
                 print(f'{simulation_sim_time_sec}: judge overload')
         return flag_overload
@@ -203,17 +203,17 @@ class JSBSimEnv(gym.Env):
                 # print(f'{simulation_sim_time_sec}: Did ot reach heading')
                 done = True
             # if current target heading is reached, random generate a new target heading
-            else:
-                delta = self.increment_size[self.heading_turn_counts]
-                self.target_heading_deg = (self.target_heading_deg + self.np_random.uniform(-delta, delta) * self.max_heading_increment + 360) % 360
-                self.target_altitude_ft += self.np_random.uniform(-delta, delta) * self.max_altitude_increment
-                self.target_velocities_u_mps += self.np_random.uniform(-delta, delta) * self.max_velocities_u_increment
-                self.heading_turn_counts += 1
+            # else:
+            #     print("selecting new heading")
+            #     delta = self.increment_size[self.heading_turn_counts]
+            #     self.target_heading_deg = (self.target_heading_deg + self.np_random.uniform(-delta, delta) * self.max_heading_increment + 360) % 360
+            #     self.target_altitude_ft += self.np_random.uniform(-delta, delta) * self.max_altitude_increment
+            #     self.target_velocities_u_mps += self.np_random.uniform(-delta, delta) * self.max_velocities_u_increment
+            #     self.heading_turn_counts += 1
                 # print(f'Current Heading:{self.simulation.get_property_value("attitude/psi-deg")}')
                 # print(f'{simulation_sim_time_sec}: target_heading:{self.target_heading_deg} heading_turn_counts:{self.heading_turn_counts} ')
                 # f'target_altitude_ft:{ self.target_altitude_ft} target_velocities_u_mps:{self.target_velocities_u_mps}')
 
-        # print( self.current_step)
         if self.current_step >= self.max_steps:
             print(f'{simulation_sim_time_sec}: max_steps')
         # if ( self.get_extreme_state() or self.current_step >= self.max_steps or \
@@ -318,9 +318,10 @@ class JSBSimEnv(gym.Env):
         init_heading = self.np_random.uniform(0., 180.)
         init_altitude = self.np_random.uniform(14000., 30000.)
         init_velocities_u = self.np_random.uniform(400., 1200.)
-        self.target_heading_deg = init_heading
-        self.target_altitude_ft = init_altitude
-        self.target_velocities_u_mps = init_velocities_u * 0.3048
+
+        self.target_heading_deg = self.np_random.uniform(0., 180.)
+        self.target_altitude_ft = self.np_random.uniform(14000., 30000.)
+        self.target_velocities_u_mps = self.np_random.uniform(400., 1200.)
         default_condition = {
             "ic/long-gc-deg": 120.0,  # geodesic longitude [deg]
             "ic/lat-geod-deg": 60.0,  # geodesic latitude  [deg]
