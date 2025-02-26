@@ -89,6 +89,7 @@ def createPdu(data: bytes) -> PduSuperclass | None:
     inputStream = DataInputStream(memoryStream)
 
     pduType = binascii.b2a_qp(bytes([data[2]])).decode()
+    # print(pduType)
     return getPdu(inputStream)
 
 
