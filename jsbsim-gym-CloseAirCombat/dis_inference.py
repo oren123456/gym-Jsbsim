@@ -2,7 +2,7 @@ import math
 
 from jsbsim_gym.features import JSBSimFeatureExtractor
 from jsbsim_gym.jsbsim_gym import JSBSimEnv
-from stable_baselines3 import  PPO
+from stable_baselines3 import PPO
 import gymnasium as gym
 
 import socket
@@ -84,30 +84,9 @@ def recv():
         return None
 
 
-def reset_env(simulation):
+def reset_env(sim_env):
     # Unpack geocentric coordinates and angles
-    _, _, _, psi, theta, phi, v_east_fps, v_north_fps, v_down_fps = latest_loc
-    x, y, z = move_forward(latest_loc, 1000)
-    body = gps.ecef2llarpy(x, y, z, psi, theta, phi)
-    vel = math.sqrt(v_east_fps ** 2 + v_north_fps ** 2)
-    default_condition = {
-        "ic/long-gc-deg": rad2deg(body[1]),  # geodesic longitude [deg]
-        "ic/lat-geod-deg": rad2deg(body[0]),  # geodesic latitude  [deg]
-        "ic/h-sl-ft": body[2],  # altitude above mean sea level [ft]
-        "ic/psi-true-deg": rad2deg(body[3]),  # initial (true) heading [deg] (0, 360)
-        "ic/u-fps": vel,  # body frame x-axis velocity [ft/s]  (-2200, 2200)
-        "ic/v-fps": 0.0,  # body frame y-axis velocity [ft/s]  (-2200, 2200)
-        "ic/w-fps": 0.0,  # body frame z-axis velocity [ft/s]  (-2200, 2200)
-        "ic/p-rad_sec": 0.0,  # roll rate  [rad/s]  (-2 * pi, 2 * pi)
-        "ic/q-rad_sec": 0.0,  # pitch rate [rad/s]  (-2 * pi, 2 * pi)
-        "ic/r-rad_sec": 0.0,  # yaw rate   [rad/s]  (-2 * pi, 2 * pi)
-        "ic/roc-fpm": 0.0,  # initial rate of climb [ft/min]
-        "ic/terrain-elevation-ft": 0,
-        'propulsion/set-running': -1  # -1 refers to "All Engines"
-    }
-    for prop, value in default_condition.items():
-        simulation.set_property_value(prop, value)
-    simulation.run_ic()  # Initializes the sim from the initial condition object
+    sim_env.reset()
     print("reset")
 
 
@@ -132,15 +111,17 @@ def send_entity_state_pdu(simulation):
                                        pitch,  # pitch (radians)
                                        yaw  # yaw (radians)
                                        )
-
     # Conversion factor from feet per second to meters per second
     pdu.entityLocation = Vector3Double(montereyLocation[0], montereyLocation[1], montereyLocation[2])
     pdu.entityOrientation = EulerAngles(montereyLocation[3], montereyLocation[4], montereyLocation[5])
-
+    # print(montereyLocation[3])
     ft_to_m = 0.3048
+    # print(rad2deg(simulation.get_property_value("attitude/heading-true-rad") ))
+    # print(simulation.get_property_value("velocities/v-east-fps") * ft_to_m)
     v_east_fps = simulation.get_property_value("velocities/v-east-fps") * ft_to_m
     v_north_fps = simulation.get_property_value("velocities/v-north-fps") * ft_to_m
     v_down_fps = simulation.get_property_value("velocities/v-down-fps") * ft_to_m
+
     pdu.entityLinearVelocity = Vector3Float(v_east_fps, v_north_fps, v_down_fps)
 
     memory_stream = BytesIO()
@@ -155,18 +136,13 @@ def update_labels(root):
     """Update labels with new values (dummy example, replace with real values)."""
     if latest_loc != None:
         x, y, z, psi, theta, phi, v_east_fps, v_north_fps, v_down_fps = latest_loc
-        body = gps.ecef2llarpy(x, y, z, psi, theta, phi)
-        # print("Latitude  : {:.2f} degrees\n".format(rad2deg(body[0]))
-        #       + " Longitude : {:.2f} degrees\n".format(rad2deg(body[1]))
-        #       + " Altitude  : {:.0f} meters\n".format(body[2])
-        #       + " Yaw       : {:.2f} degrees\n".format(rad2deg(body[3]))
-        #       + " Pitch     : {:.2f} degrees\n".format(rad2deg(body[4]))
-        #       + " Roll      : {:.2f} degrees\n".format(rad2deg(body[5]))
-        #       )
-        speed = math.sqrt(v_east_fps ** 2 + v_north_fps ** 2)*0.3048
-        # Update labels stored in root
-        root.alt_label.config(text=f"altitude(f): {body[2]:.2f}")
-        root.heading_label.config(text=f"heading(deg): {rad2deg(body[3]):.2f}")
+        lat, lon, alt, roll, pitch, yaw = gps.ecef2llarpy(x, y, z, psi, theta, phi)
+        speed = math.sqrt(v_east_fps ** 2 + v_north_fps ** 2 + v_down_fps ** 2)
+
+        root.lat_label.config(text=f"lat(deg): {rad2deg(lat):.4f}")
+        root.long_label.config(text=f"long(deg): {rad2deg(lon):.4f}")
+        root.alt_label.config(text=f"altitude(f): {alt * 3.28084:.2f}")
+        root.heading_label.config(text=f"heading(deg): {rad2deg(yaw):.2f}")
         root.speed_label.config(text=f"Speed(m/s): {speed:.2f}")
     # Call this function again after 1 second
     root.after(500, lambda: update_labels(root))
@@ -176,35 +152,83 @@ def submit_id(root):
     print(int(root.id_entry_box.get()))  # Get input and convert to integer)
 
 
-def submit_location(root):
-    print(int(root.long_entry_box.get()))  # Get input and convert to integer)
+def is_valid_float(entry_value):
+    try:
+        float(entry_value)  # Try converting to float
+        return True
+    except ValueError:
+        return False
 
 
-def submit_turn_command(root, env):
-    env.target_heading_deg = int(root.heading_entry_box.get())
-    env.target_altitude_ft = int(root.alt_entry_box.get())
-    env.target_velocities_u_mps = int(root.speed_entry_box.get())
+def is_valid(value_type, box):
+    val = None
+    if value_type == int and box.get().isdigit():
+        val = int(box.get())
+    elif value_type == float and is_valid_float(box.get()):
+        val = float(box.get())
+    if val:
+        box.configure(bg="white")
+        return True
+    else:
+        box.configure(bg="red")
+        return False
+
+
+def submit_reset_heading_speed(root, sim_env):
+    if is_valid(int, root.reset_heading_entry_box):
+        sim_env.simulation.set_property_value("ic/psi-true-deg", int(root.reset_heading_entry_box.get()))
+    if is_valid(int, root.reset_speed_entry_box):
+        sim_env.simulation.set_property_value("ic/u-fps", int(root.reset_speed_entry_box.get())*3.28084)
+        # print(f"set ic/u-fps to: {int(root.reset_speed_entry_box.get())}")
+    sim_env.simulation.run_ic()
+
+
+def submit_reset_location(root, sim_env):
+    if is_valid(int, root.reset_alt_entry_box):
+        sim_env.simulation.set_property_value("ic/h-sl-ft", int(root.reset_alt_entry_box.get()))
+    if is_valid(float, root.reset_long_entry_box):
+        sim_env.simulation.set_property_value("ic/long-gc-deg", float(root.reset_long_entry_box.get()))
+    if is_valid(float, root.reset_lat_entry_box):
+        sim_env.simulation.set_property_value("ic/lat-gc-deg", float(root.reset_lat_entry_box.get()))
+    sim_env.simulation.run_ic()
+
+
+def submit_turn_command(root, sim_env):
+    if is_valid(int, root.target_heading_entry_box):
+        sim_env.target_heading_deg = int(root.target_heading_entry_box.get())
+    if is_valid(int, root.target_alt_entry_box):
+        sim_env.target_altitude_ft = int(root.target_alt_entry_box.get())
+    if is_valid(int, root.target_speed_entry_box):
+        sim_env.target_velocities_u_mps = int(root.target_speed_entry_box.get())
 
 
 # Tkinter GUI setup
 def create_gui(sim_env):
     root = tk.Tk()
     root.title("Control Panel")
-    root.geometry("400x250")
+    root.geometry("500x250")
 
     button_frame = tk.Frame(root)
     button_frame.pack(side=tk.TOP, anchor="w", pady=5, padx=5)
-    reset_button = tk.Button(button_frame, text="Reset Env", command=lambda: reset_env())
+    reset_button = tk.Button(button_frame, text="Reset Env", command=lambda: reset_env(sim_env))
     reset_button.pack(side=tk.LEFT)
     # **Frame for Labels**
-    labels_frame = tk.Frame(root)
-    labels_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
-    root.alt_label = tk.Label(labels_frame, text="altitude(f)", font=("Arial", 8))
-    root.alt_label.pack(anchor="w")
-    root.heading_label = tk.Label(labels_frame, text="heading(deg)", font=("Arial", 8))
-    root.heading_label.pack(anchor="w")
-    root.speed_label = tk.Label(labels_frame, text="Speed(m/s)", font=("Arial", 8))
-    root.speed_label.pack(anchor="w")
+    location_labels_frame = tk.Frame(root)
+    location_labels_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.lat_label = tk.Label(location_labels_frame, text="lat(deg)", font=("Arial", 8))
+    root.lat_label.pack(side=tk.LEFT)
+    root.long_label = tk.Label(location_labels_frame, text="long(deg)", font=("Arial", 8))
+    root.long_label.pack(side=tk.LEFT)
+    root.alt_label = tk.Label(location_labels_frame, text="altitude(f)", font=("Arial", 8))
+    root.alt_label.pack(side=tk.LEFT)
+    # **Frame for Labels**
+    heading_labels_frame = tk.Frame(root)
+    heading_labels_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.heading_label = tk.Label(heading_labels_frame, text="heading(deg)", font=("Arial", 8))
+    root.heading_label.pack(side=tk.LEFT)
+    root.speed_label = tk.Label(heading_labels_frame, text="Speed(m/s)", font=("Arial", 8))
+    root.speed_label.pack(side=tk.LEFT)
+
     # **Entry Box for Track Entity ID (Inside a Frame)**
     id_frame = tk.Frame(root)
     id_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
@@ -212,47 +236,68 @@ def create_gui(sim_env):
     root.input_label.pack(side=tk.LEFT)
     root.id_entry_box = tk.Entry(id_frame, font=("Arial", 8), width=8)
     root.id_entry_box.pack(side=tk.LEFT, padx=5)
-    submit_button = tk.Button(id_frame, text="Submit", font=("Arial", 8), command=lambda: submit_id(root))
-    submit_button.pack(side=tk.RIGHT, padx=5)
-    # # **Entry Box for Set Location**
-    location_frame = tk.Frame(root)
-    location_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
-    root.location_input_label = tk.Label(location_frame, text="set location: lan", font=("Arial", 8))
-    root.location_input_label.pack(side=tk.LEFT)
-    root.long_entry_box = tk.Entry(location_frame, font=("Arial", 8), width=8)
-    root.long_entry_box.pack(side=tk.LEFT)
-    root.long_input_label = tk.Label(location_frame, text="long", font=("Arial", 8))
-    root.long_input_label.pack(side=tk.LEFT, padx=5)
-    root.lat_entry_box = tk.Entry(location_frame, font=("Arial", 8), width=8)
-    root.lat_entry_box.pack(side=tk.LEFT)
-    submit_button = tk.Button(location_frame, text="Submit", font=("Arial", 8), command=lambda: submit_location(root))
-    submit_button.pack(side=tk.RIGHT, padx=5)  # Add spacing
-    # **Set heading , alt, speed**
-    turn_frame = tk.Frame(root)
-    turn_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
-    root.heading_input_label = tk.Label(turn_frame, text="heading(deg):", font=("Arial", 8))
-    root.heading_input_label.pack(side=tk.LEFT)
-    root.heading_entry_box = tk.Entry(turn_frame, font=("Arial", 8), width=5)
-    root.heading_entry_box.pack(side=tk.LEFT, padx=5)
-    root.alt_input_label = tk.Label(turn_frame, text="alt(f):", font=("Arial", 8))
-    root.alt_input_label.pack(side=tk.LEFT)
-    root.alt_entry_box = tk.Entry(turn_frame, font=("Arial", 8), width=5)
-    root.alt_entry_box.pack(side=tk.LEFT, padx=5)
-    root.speed_input_label = tk.Label(turn_frame, text="speed(m/s):", font=("Arial", 8))
-    root.speed_input_label.pack(side=tk.LEFT)
-    root.speed_entry_box = tk.Entry(turn_frame, font=("Arial", 8), width=5)
-    root.speed_entry_box.pack(side=tk.LEFT, padx=5)
-    submit_button = tk.Button(turn_frame, text="Submit", font=("Arial", 8), command=lambda: submit_turn_command(root, sim_env))
-    submit_button.pack(side=tk.RIGHT)
-    # **Button Next to Entry Box**
-    input_frame = tk.Frame(root)
-    input_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
-    root.input_label = tk.Label(input_frame, text="Enter an integer above.", font=("Arial", 12))
-    root.input_label.pack()
+    target_submit_button = tk.Button(id_frame, text="Submit", font=("Arial", 8), command=lambda: submit_id(root))
+    target_submit_button.pack(side=tk.RIGHT, padx=5)
+    # # Reset Location**
+    reset_location_frame = tk.Frame(root)
+    reset_location_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.reset_location_input_label = tk.Label(reset_location_frame, text="Reset: lat(deg)", font=("Arial", 8))
+    root.reset_location_input_label.pack(side=tk.LEFT)
+    root.reset_long_entry_box = tk.Entry(reset_location_frame, font=("Arial", 8), width=8)
+    root.reset_long_entry_box.insert(0, "120")
+    root.reset_long_entry_box.pack(side=tk.LEFT)
+    root.reset_long_input_label = tk.Label(reset_location_frame, text="long(deg)", font=("Arial", 8))
+    root.reset_long_input_label.pack(side=tk.LEFT, padx=5)
+    root.reset_lat_entry_box = tk.Entry(reset_location_frame, font=("Arial", 8), width=8)
+    root.reset_lat_entry_box.pack(side=tk.LEFT)
+    root.reset_lat_entry_box.insert(0, "60")
+    root.reset_alt_input_label = tk.Label(reset_location_frame, text="alt(f)", font=("Arial", 8))
+    root.reset_alt_input_label.pack(side=tk.LEFT, padx=5)
+    root.reset_alt_entry_box = tk.Entry(reset_location_frame, font=("Arial", 8), width=8)
+    root.reset_alt_entry_box.pack(side=tk.LEFT)
+    root.reset_alt_entry_box.insert(0, "10000")
+    reset_submit_button = tk.Button(reset_location_frame, text="Submit", font=("Arial", 8), command=lambda: submit_reset_location(root, sim_env))
+    reset_submit_button.pack(side=tk.RIGHT, padx=5)  # Add spacing
+    # # Reset Heading speed**
+    reset_location_frame_2 = tk.Frame(root)
+    reset_location_frame_2.pack(side=tk.TOP, anchor="w", padx=30, pady=5)
+    root.reset_heading_input_label = tk.Label(reset_location_frame_2, text="heading(deg)", font=("Arial", 8))
+    root.reset_heading_input_label.pack(side=tk.LEFT, padx=5)
+    root.reset_heading_entry_box = tk.Entry(reset_location_frame_2, font=("Arial", 8), width=8)
+    root.reset_heading_entry_box.pack(side=tk.LEFT)
+    root.reset_heading_entry_box.insert(0, "90")
+    root.reset_speed_input_label = tk.Label(reset_location_frame_2, text="speed(m/s)", font=("Arial", 8))
+    root.reset_speed_input_label.pack(side=tk.LEFT, padx=5)
+    root.reset_speed_entry_box = tk.Entry(reset_location_frame_2, font=("Arial", 8), width=8)
+    root.reset_speed_entry_box.pack(side=tk.LEFT)
+    root.reset_speed_entry_box.insert(0, "300")
+    reset_submit_button = tk.Button(reset_location_frame_2, text="Submit", font=("Arial", 8), command=lambda: submit_reset_heading_speed(root, sim_env))
+    reset_submit_button.pack(side=tk.RIGHT, padx=5)  # Add spacing
+    # **target heading , alt, speed**
+    target_turn_frame = tk.Frame(root)
+    target_turn_frame.pack(side=tk.TOP, anchor="w", padx=5, pady=5)
+    root.target_heading_input_label = tk.Label(target_turn_frame, text="Target: heading(deg): 45", font=("Arial", 8))
+    root.target_heading_input_label.pack(side=tk.LEFT)
+    root.target_heading_entry_box = tk.Entry(target_turn_frame, font=("Arial", 8), width=5)
+    root.target_heading_entry_box.pack(side=tk.LEFT, padx=5)
+    root.target_heading_entry_box.insert(0, "45")
+    root.target_alt_input_label = tk.Label(target_turn_frame, text="alt(f):", font=("Arial", 8))
+    root.target_alt_input_label.pack(side=tk.LEFT)
+    root.target_alt_entry_box = tk.Entry(target_turn_frame, font=("Arial", 8), width=5)
+    root.target_alt_entry_box.pack(side=tk.LEFT, padx=5)
+    root.target_alt_entry_box.insert(0, "5000")
+    root.target_speed_input_label = tk.Label(target_turn_frame, text="speed(m/s):", font=("Arial", 8))
+    root.target_speed_input_label.pack(side=tk.LEFT)
+    root.target_speed_entry_box = tk.Entry(target_turn_frame, font=("Arial", 8), width=5)
+    root.target_speed_entry_box.pack(side=tk.LEFT, padx=5)
+    root.target_speed_entry_box.insert(0, "200")
+    target_submit_button = tk.Button(target_turn_frame, text="Submit", font=("Arial", 8), command=lambda: submit_turn_command(root, sim_env))
+    target_submit_button.pack(side=tk.RIGHT)
 
     # Start updating labels
     update_labels(root)
     root.mainloop()
+
 
 env = gym.make("JSBSim-v0")
 models_dir = f"models/best_model"
@@ -262,14 +307,17 @@ obs, info = env.reset()
 done = False
 steps = 0
 rewards_sum = 0
-sim_env = env.unwrapped
+_sim_env = env.unwrapped
+_sim_env.simulation.set_property_value("reset", 0)
 
 # Run the GUI in a separate thread so the main loop continues
-threading.Thread(target=create_gui, args=(sim_env,), daemon=True).start()
+threading.Thread(target=create_gui, args=(_sim_env,), daemon=True).start()
 while True:
     action, _ = model.predict(obs, deterministic=True)
-    obs, rewards, done, _ , info = env.step(action)
-    send_entity_state_pdu(sim_env.simulation)
+    action = [0,0,0,0]
+    obs, rewards, done, _, info = env.step(action)
+    send_entity_state_pdu(_sim_env.simulation)
     latest_loc = recv()
+    env.render()
     time.sleep(1)
 env.close()
